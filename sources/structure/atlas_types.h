@@ -314,20 +314,25 @@ namespace atlas {
   typedef unsigned int Parabolic;
   typedef unsigned int KGPElt;
 
-  namespace descents { class DescentStatus; }
+  namespace descents { 
+    class DescentStatus; 
+    class hDescentStatus; 
+  }
   using descents::DescentStatus;
+  using descents::hDescentStatus;
   typedef std::vector<DescentStatus> DescentStatusList;
+  typedef std::vector<hDescentStatus> hDescentStatusList;
 
   namespace blocks {
     class Block_base;
     class Block;
     class non_integral_block;
-    class hblock;
+    class hBlock;
   }
   using blocks::Block_base;
   using blocks::Block;
   using blocks::non_integral_block;
-  using blocks::hblock;
+  using blocks::hBlock;
   typedef unsigned int BlockElt;
   typedef std::vector<BlockElt> BlockEltList;
   typedef std::pair<BlockElt,BlockElt> BlockEltPair;
