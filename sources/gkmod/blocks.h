@@ -380,7 +380,7 @@ class non_integral_block : public Block_base
 number of orbits of the twisted involution on the simple roots; this
 corresponds to the appropriate twisted Hecke algebra.
  */
-class hblock : public Block
+class hBlock : public Block
 {
 
   std::vector<BlockElt> d_twist; //twist of each block element, of size size()
@@ -393,7 +393,7 @@ class hblock : public Block
  public:
 
   // constructors and destructors
-  hblock
+  hBlock
     (const KGB& kgb,
      const KGB& dual_kgb
      );
@@ -412,7 +412,7 @@ class hblock : public Block
   BlockElt hcross(size_t s,BlockElt j) const { assert(s < hrank()); 
     assert(j < hsize()); return d_hcross[s][j]; }
  
-}; // |class hblock|
+}; // |class hBlock|
 
 } // |namespace blocks|
 
