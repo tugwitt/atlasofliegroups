@@ -1515,7 +1515,7 @@ void hblock_f()
     ioutils::OutputFile f;
     KGB kgb(GR);
     KGB dual_kgb(dual_GR);
-    blocks::hblock block = hblock(kgb, dual_kgb);
+    blocks::hBlock block = hBlock(kgb, dual_kgb);
 
      block_io::printHBlockD(f,block);
     /*
