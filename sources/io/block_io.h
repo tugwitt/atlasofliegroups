@@ -26,7 +26,7 @@ namespace block_io {
 
   std::ostream& printBlockD(std::ostream&, const Block&);
 
-  std::ostream& printHBlockD(std::ostream&, const hblock&);
+  std::ostream& printHBlockD(std::ostream&, const hBlock&);
 
   std::ostream& printBlockU(std::ostream&, const Block&);
 
