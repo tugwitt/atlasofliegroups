@@ -1437,7 +1437,7 @@ std::ostream& non_integral_block::print(std::ostream& strm, BlockElt z) const
   return strm << ") ";
 }
 
-hblock::hblock
+hBlock::hBlock
   (const KGB& kgb,
    const KGB& dual_kgb)
     :  Block(kgb,dual_kgb)
@@ -1481,7 +1481,7 @@ hblock::hblock
 		assert(length(cross(s,yright))==length(d_h[z])+2 or 
 		       length(cross(s,yright))==length(d_h[z])-2);}
 	  }//loop over s
-  }//hblock::hblock
+  }//hBlock::hBlock
 
        
 
