@@ -1437,6 +1437,53 @@ std::ostream& non_integral_block::print(std::ostream& strm, BlockElt z) const
   return strm << ") ";
 }
 
+hblock::hblock
+  (const KGB& kgb,
+   const KGB& dual_kgb)
+    :  Block(kgb,dual_kgb)
+    , d_twist(size())
+    , d_fixnbr(size(),UndefBlock)
+    , d_h()
+    , d_hcross(rank()/2)
+  
+{d_twist.push_back(0);
+  d_h.push_back(0);
+  d_fixnbr[0] = 0;
+    if(size() > 1) for(size_t z=1; z<size(); ++z) //find a descent, cross down, 
+	//twist, cross up
+	{
+	  weyl::Generator s=firstStrictGoodDescent(z);
+	  assert(s < hrank());
+	  assert(isStrictAscent(hrank()+s,d_twist[cross(s,z)]));
+		 d_twist[z] = cross(hrank() + s,d_twist[cross(s,z)]); 
+		 if(d_twist[z]==z) 
+		   {
+		     d_fixnbr[z]=d_h.size();
+		     d_h.push_back(z);
+		   }
+		     
+	}
+    for(weyl::Generator s=0; s<hrank(); ++s)
+      d_hcross[s].reserve(hsize());
+      for(size_t z=0;z<hsize(); ++z) //fill the hcross table
+	for(weyl::Generator s=0; s<hrank(); ++s)
+	  {
+	    BlockElt yleft=cross(s,d_h[z]);
+	    BlockElt yright=cross(hrank()+s,d_h[z]);
+	    if(yleft==yright)
+	      {d_hcross[s].push_back(d_fixnbr[yleft]);
+		assert(d_twist[yleft]==yleft);
+		assert(length(yleft)==length(d_h[z])+1 or 
+		       length(yleft)==length(d_h[z])-1);}
+	    else 
+	      {d_hcross[s].push_back(d_fixnbr[cross(s,yright)]);
+		assert(d_twist[cross(s,yright)]==cross(s,yright));
+		assert(length(cross(s,yright))==length(d_h[z])+2 or 
+		       length(cross(s,yright))==length(d_h[z])-2);}
+	  }//loop over s
+  }//hblock::hblock
+
+       
 
 /*****************************************************************************
 
