@@ -84,6 +84,7 @@ namespace {
   void X_f();
   void iblock_f();
   void nblock_f();
+  void hblock_f();
   void embedding_f();
 
 
@@ -205,7 +206,7 @@ void addTestCommands<realmode::RealmodeTag>
   if (testMode == RealMode)
     mode.add("test",test_f);
 
-  // add additional commands here :
+  // add additional commands here:
 
   mode.add("checkbasept",checkbasept_f);
   mode.add("sub_KGB",sub_KGB_f);
@@ -218,7 +219,6 @@ void addTestCommands<realmode::RealmodeTag>
   mode.add("branch",branch_f);
   mode.add("qbranch",qbranch_f);
   mode.add("srtest",srtest_f);
-
   mode.add("examine",exam_f);
   mode.add("iblock",iblock_f);
   mode.add("nblock",nblock_f);
@@ -232,7 +232,9 @@ void addTestCommands<blockmode::BlockmodeTag>
 {
   if (testMode == BlockMode)
     mode.add("test",test_f);
+// Add additional commands here:
 
+  mode.add("hblock",hblock_f);
 }
 
 
@@ -1289,7 +1291,6 @@ void nblock_f()
   }
 } // |nblock_f|
 
-
 tits::TorusElement torus_part
   (const RootDatum& rd,
    const WeightInvolution& theta,
@@ -1502,6 +1503,83 @@ void test_f()
   }
 } // |test_f|
 
+
+  // Block mode functions
+
+void hblock_f()
+{
+  try
+  {
+    RealReductiveGroup& GR = realmode::currentRealGroup();
+    RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+    ioutils::OutputFile f;
+    KGB kgb(GR);
+    KGB dual_kgb(dual_GR);
+    blocks::hblock block = hblock(kgb, dual_kgb);
+
+     block_io::printHBlockD(f,block);
+    /*
+    kl::KLContext klc(block);
+    klc.fill(z,false);
+
+    typedef Polynomial<int> Poly;
+    typedef std::map<BlockElt,Poly> map_type;
+    map_type acc;
+    unsigned int parity = block.length(z)%2;
+    for (size_t x = 0; x <= z; ++x)
+    {
+      const kl::KLPol& pol = klc.klPol(x,z);
+      if (not pol.isZero())
+      {
+	Poly p(pol); // convert
+	if (block.length(x)%2!=parity)
+	  p*=-1;
+	BlockEltList nb=block.nonzeros_below(x);
+	for (size_t i=0; i<nb.size(); ++i)
+	{
+	  std::pair<map_type::iterator,bool> trial = 
+	    acc.insert(std::make_pair(nb[i],p));
+	  if (not trial.second) // failed to create a new entry
+	    trial.first->second += p;
+	} // |for (i)| in |nb|
+      } // |if(pol!=0)|
+    } // |for (x<=z)|
+
+
+    f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
+      << "KL polynomials (-1)^{l(" << z << ")-l(x)}*P_{x," << z << "}:\n";
+    int width = ioutils::digits(z,10ul);
+    for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
+    {
+      BlockElt x = it->first;
+      const Poly& pol = it->second;
+      if (not pol.isZero())
+      {
+    	f << std::setw(width) << x << ": ";
+    	prettyprint::printPol(f,pol,"q") << std::endl;
+      }
+    }
+    */
+  }
+  catch (error::MemoryOverflow& e)
+  {
+    e("error: memory overflow");
+  }
+  catch (error::InputError& e)
+  {
+    e("aborted");
+  }
+  catch (std::exception& e)
+  {
+    std::cerr << "error occurrend: " << e.what() << std::endl;
+  }
+  catch (...)
+  {
+    std::cerr << std::endl << "unidentified error occurred" << std::endl;
+
+  }
+ 
+} // |hblock_f|
 
 
 //Help commands
