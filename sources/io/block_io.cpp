@@ -255,7 +255,7 @@ std::ostream& printBlockD(std::ostream& strm, const Block& block)
   return strm;
 }
 /*
-  Print the data from hblock to strm.
+  Print the data from hBlock to strm.
 
   Explanation: for each parameter, we output the cross-actions and
   cayley-actions for each generator, the length, and the underlying root
@@ -268,7 +268,7 @@ std::ostream& printBlockD(std::ostream& strm, const Block& block)
 
   NOTE: this version outputs involutions in reduced-involution form.
 */
-std::ostream& printHBlockD(std::ostream& strm, const hblock& block)
+std::ostream& printHBlockD(std::ostream& strm, const hBlock& block)
 {
   // compute maximal width of entry
   int width = ioutils::digits(block.size()-1,10ul);
