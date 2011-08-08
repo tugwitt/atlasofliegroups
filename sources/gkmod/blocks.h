@@ -375,6 +375,45 @@ class non_integral_block : public Block_base
 
 }; // |class non_integral_block|
 
+/*!
+\brief block tracking elements fixed by outer automorphism. hrank is the
+number of orbits of the twisted involution on the simple roots; this
+corresponds to the appropriate twisted Hecke algebra.
+ */
+class hblock : public Block
+{
+
+  std::vector<BlockElt> d_twist; //twist of each block element, of size size()
+  std::vector<BlockElt> d_fixnbr; //position of each block element on
+				  //list d_h, of size size();
+				  //UndefBlock if not fixed. 
+  std::vector<BlockElt> d_h; // list of fixed elements, of size hsize()
+  std::vector<BlockEltList> d_hcross; // of size hrank()
+
+ public:
+
+  // constructors and destructors
+  hblock
+    (const KGB& kgb,
+     const KGB& dual_kgb
+     );
+
+  // std::ostream& print(std::ostream& strm, BlockElt z) const;
+
+  // new methods
+
+  size_t hsize() const { return d_h.size(); }
+  size_t hrank() const { return d_hcross.size(); }
+ 
+  BlockElt hfixed(BlockElt j) const { return d_h[j]; } //BlockElt
+						     //for jth fixed
+  size_t hpos(BlockElt z) const {return d_fixnbr[z]; }
+  BlockElt twist(BlockElt z) const { return d_twist[z]; }
+  BlockElt hcross(size_t s,BlockElt j) const { assert(s < hrank()); 
+    assert(j < hsize()); return d_hcross[s][j]; }
+ 
+}; // |class hblock|
+
 } // |namespace blocks|
 
 } // |namespace atlas|
