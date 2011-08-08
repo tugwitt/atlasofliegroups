@@ -254,6 +254,90 @@ std::ostream& printBlockD(std::ostream& strm, const Block& block)
 
   return strm;
 }
+/*
+  Print the data from hblock to strm.
+
+  Explanation: for each parameter, we output the cross-actions and
+  cayley-actions for each generator, the length, and the underlying root
+  datum permutation (or rather, the corresponding Weyl group element).
+  We use a '*' for undefined cayley actions.
+
+  NOTE: this will print reasonably on 80 columns only for groups that are
+  not too large (up to rank 4 or so). We haven't tried to go over to more
+  sophisticated formatting for larger groups.
+
+  NOTE: this version outputs involutions in reduced-involution form.
+*/
+std::ostream& printHBlockD(std::ostream& strm, const hblock& block)
+{
+  // compute maximal width of entry
+  int width = ioutils::digits(block.size()-1,10ul);
+  int iwidth = ioutils::digits(block.hsize()-1,10ul);
+  int xwidth = ioutils::digits(block.xsize()-1,10ul);
+  int ywidth = ioutils::digits(block.ysize()-1,10ul);
+  int lwidth = ioutils::digits(block.length(block.size()-1),10ul);
+  int cwidth = ioutils::digits(block.Cartan_class(block.size()-1),10ul);
+  const int pad = 2;
+
+  for (size_t i = 0; i < block.hsize(); ++i) {
+    // print entry number and corresponding orbit pair
+    BlockElt j = block.hfixed(i);
+    strm << std::setw(iwidth) << i;
+    strm << std::setw(width+pad) << j;
+    strm << '(' << std::setw(xwidth) << block.x(j);
+    strm << ',';
+    strm << std::setw(ywidth) << block.y(j) << ')';
+    strm << ':';
+
+    // print length
+    strm << std::setw(lwidth+pad) << block.length(j);
+
+    // print Cartan class
+    strm << std::setw(cwidth+pad) << block.Cartan_class(j);
+    strm << std::setw(pad) << "";
+
+    // print descents
+    printDescent(strm,block.descent(j),block.hrank());
+
+    // print cross actions
+    for (size_t s = 0; s < block.hrank(); ++s) {
+      BlockElt z = block.hcross(s,i);
+      if (z == blocks::UndefBlock)
+	strm << std::setw(width+pad) << '*';
+      else
+	strm << std::setw(width+pad) << z;
+    }
+    strm << std::setw(pad+1) << "";
+    strm << std::endl;
+    /* Skip Cayley transforms for now, since only using complex G
+    // print Cayley transforms
+    for (size_t s = 0; s < block.rank(); ++s)
+    {
+      BlockEltPair z = block.isWeakDescent(s,j)
+	                     ? block.inverseCayley(s,j)
+	                     : block.cayley(s,j);
+      strm << '(' << std::setw(width);
+      if (z.first == blocks::UndefBlock)
+	strm << '*';
+      else
+	strm << z.first;
+      strm << ',' << std::setw(width);
+      if (z.second == blocks::UndefBlock)
+	strm << '*';
+      else
+	strm << z.second;
+      strm << ')' << std::setw(pad) << "";
+    }
+    strm << ' ';
+    
+    // print root datum involution as involution reduced expression
+    prettyprint::printInvolution
+      (strm,block.involution(j),block.twistedWeylGroup()) << std::endl;
+    */
+  } //for i
+
+  return strm;
+}
 
 
 /*
@@ -405,6 +489,6 @@ std::ostream& printDescent(std::ostream& strm,
   return strm;
 }
 
-}
+}// namespace block_io
 
-}
+}// namespace atlas
