@@ -92,69 +92,6 @@ class KLSupport
 
 }; //class KLSupport
 
-class hKLSupport
-{
-  enum State { DownsetsFilled, LengthLessFilled, Filled, NumStates};
-
-  BitSet<NumStates> d_state;
-
-  hBlock& d_hBlock;  // non-owned reference
-
-  std::vector<RankFlags> d_hdescent;
-  std::vector<RankFlags> d_goodhAscent;
-  std::vector<BitMap> d_downset;
-  std::vector<BitMap> d_primset;
-  std::vector<BlockElt> d_lengthLess;
-
- public:
-
-// constructors and destructors
-  hKLSupport(hBlock&);
-
-// copy and swap (use automatically generated copy constructor)
-  void swap(hKLSupport&);
-
-// accessors
-
-  const hBlock& hblock() const { return d_hBlock; }
-  BlockElt hcross(size_t s, BlockElt j) const
-    { return d_hBlock.hcross(s,j); }
-  //  BlockEltPair hcayley(size_t s, BlockElt j) const
-  //    { return d_hBlock.hcayley(s,z); }
-  const RankFlags& hdescentSet(BlockElt z) const
-    { return d_hdescent[z]; }
-  /*!
-\brief Descent status of simple root s for block element z. Taken directly from the hblock.
-  */
-  //  hDescentStatus::Value descentValue(size_t s, BlockElt j)
-  //    const
-  //    { return d_hBlock.hdescentValue(s,j); }
-  //  const hDescentStatus& descent(BlockElt k) const // full info
-  //    { return d_hBlock.hdescent(k); }
-
-  size_t hrank() const { return d_hBlock.hrank(); }
-  size_t hsize() const { return d_hBlock.hsize(); }
-
-  const RankFlags& goodhAscentSet(BlockElt z) const
-    { return d_goodhAscent[z]; }
-  size_t length(BlockElt z) const { return d_hBlock.length(z); }
-  /*!
-\brief Number of block elements of length strictly less than l.
-  */
-  BlockElt lengthLess(size_t l) const { return d_lengthLess[l]; }
-
-  BlockElt primitivize
-    (BlockElt x, const RankFlags& A) const;
-
-  // the following are filters of the bitmap
-  void extremalize(BitMap&, const RankFlags&) const;
-  void primitivize(BitMap&, const RankFlags&) const;
-
-// manipulators
-  void fill();
-  void fillDownsets();
-
-}; //class hklsupport
 
 } // namespace klsupport
 

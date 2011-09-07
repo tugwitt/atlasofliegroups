@@ -47,6 +47,7 @@
 #include "matreduc.h"
 #include "testrun.h"
 #include "basic_io.h"
+#include "hkl.h"
 
 /*****************************************************************************
 
@@ -87,6 +88,9 @@ namespace {
   void hblock_f();
   void embedding_f();
 
+  void hkllist_f();
+  void hklbasis_f();
+  void hkltest_f();
 
   // help functions
 
@@ -235,6 +239,9 @@ void addTestCommands<blockmode::BlockmodeTag>
 // Add additional commands here:
 
   mode.add("hblock",hblock_f);
+  mode.add("hkllist",hkllist_f);
+  mode.add("hklbasis",hklbasis_f);
+  mode.add("hkltest",hkltest_f);
 }
 
 
@@ -1510,7 +1517,7 @@ void hblock_f()
 {
   try
   {
-    RealReductiveGroup& GR = realmode::currentRealGroup();
+	RealReductiveGroup& GR = realmode::currentRealGroup();
     RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
     ioutils::OutputFile f;
     KGB kgb(GR);
@@ -1518,6 +1525,58 @@ void hblock_f()
     blocks::hBlock block = hBlock(kgb, dual_kgb);
 
      block_io::printHBlockD(f,block);
+  
+    Block* block_pointer = new Block(Block::build(realmode::currentRealGroup(),blockmode::currentDualRealGroup()));
+	kl::KLContext* klc_pointer=new kl::KLContext(*block_pointer);
+    klc_pointer->fill();
+
+	size_t hbsize = block.hsize();
+	size_t klsize = klc_pointer->size();
+	std::vector<bool> flags(klsize,false);
+	for (size_t i=0; i<hbsize; i++) {
+		BlockElt j = block.hfixed(i);
+		flags[j] = true;
+	}
+  
+  size_t count = 0;
+  int width = ioutils::digits(klc_pointer->size()-1,10ul);
+  int tab = 2;
+
+  for (size_t y = 0; y < klc_pointer->size(); ++y)
+  {
+
+    f << std::setw(width) << y << ": ";
+    bool first = true;
+
+	if (flags[y]) {
+    for (size_t x = 0; x <= y; ++x) {
+		if (flags[x]) {
+      const kl::KLPol& pol = klc_pointer->klPol(x,y);
+      if (pol.isZero())
+	continue;
+      if (first)
+      {
+	f << std::setw(width) << x << ": ";
+	first = false;
+      }
+      else
+      {
+	f << std::setw(width+tab)<< ""
+	     << std::setw(width) << x << ": ";
+      }
+      prettyprint::printPol(f,pol,"q");
+      f << "" << std::endl;
+      ++count;
+		}
+    }
+
+    f << "" << std::endl;
+	}
+	else {
+		f << std::setw(width) << y << ": 1" << std::endl << std::endl;
+	}
+  }
+
     /*
     kl::KLContext klc(block);
     klc.fill(z,false);
@@ -1644,6 +1703,203 @@ void srtest_h()
   io::printFile(std::cerr,"srtest.help",io::MESSAGE_DIR);
 }
 
+void hkllist_f() {
+	RealReductiveGroup& GR = realmode::currentRealGroup();
+	RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+	ioutils::OutputFile file;
+	std::ostream& strm = file;
+
+	std::cerr << "Building KGB/Dual KGB ... ";
+	KGB kgb(GR);
+	KGB dual_kgb(dual_GR);
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Building hblock ... ";
+	blocks::hBlock block = hBlock(kgb, dual_kgb);
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Computing twisted KL polynomials ... ";
+	kl::hKLContext* hklc = new kl::hKLContext(block);
+	hklc->fill();
+	std::cerr << "Done." << std::endl;
+
+	// sort the polynomials before printing
+	const kl::hKLStore& plist = hklc->getPolyList();
+	std::vector<kl::hKLPol> splist;
+	size_t psize = plist.size();
+	for (kl::KLIndex i=1; i<psize; i++) {
+		splist.push_back(plist[i]);
+	}
+	strm << "Printing " << psize-1 << " twisted KL polynomials:" << std::endl;
+
+	// sort
+	std::sort(splist.begin(),splist.end(),polynomials::compare<kl::hKLCoeff>);
+
+	// write the polynomials
+	for (size_t i=0; i<psize-1; i++) {
+		prettyprint::printPol(strm,splist[i],"q");
+		strm << std::endl;
+	}
+}
+
+void hklbasis_f() {
+	RealReductiveGroup& GR = realmode::currentRealGroup();
+	RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+	ioutils::OutputFile file;
+	std::ostream& strm = file;
+
+	std::cerr << "Building KGB/Dual KGB ... ";
+	KGB kgb(GR);
+	KGB dual_kgb(dual_GR);
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Building hblock ... ";
+	blocks::hBlock block = hBlock(kgb, dual_kgb);
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Computing twisted KL polynomials ... ";
+	kl::hKLContext* hklc = new kl::hKLContext(block);
+	hklc->fill();
+	std::cerr << "Done." << std::endl;
+
+	// print the full basis
+	size_t hsize = hklc->getSize();
+	int width = ioutils::digits(hsize-1,10ul);
+	strm << "Printing " << hsize << " elements with " << hklc->getPolyList().size()-1 << " distinct polynomials:" << std::endl;
+	for (size_t y=0; y<hsize; y++) {
+	//for (size_t y=hsize; y-->0;) {
+		strm << std::setw(width) << y << ": ";
+		bool first = true;
+
+		for (size_t x = 0; x <= y; ++x) {
+			const kl::hKLPol& pol = hklc->getPoly(x,y);
+			if (pol.isZero()) continue;
+			if (first) {
+				strm << std::setw(width) << x << ": ";
+				first = false;
+			}
+			else {
+				strm << std::setw(width+2)<< "" << std::setw(width) << x << ": ";
+			}
+			prettyprint::printPol(strm,pol,"q");
+			strm << std::endl;
+		}
+
+		strm << std::endl;
+	}
+}
+  
+void hkltest_f() {
+	RealReductiveGroup& GR = realmode::currentRealGroup();
+	RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+	ioutils::OutputFile file;
+	std::ostream& strm = file;
+
+	std::cerr << "Building KGB/Dual KGB ... ";
+	KGB kgb(GR);
+	KGB dual_kgb(dual_GR);
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Building hblock ... ";
+	blocks::hBlock *hblock = new hBlock(kgb, dual_kgb);
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Computing KL polynomials ... ";
+	kl::KLContext* klc=new kl::KLContext(*hblock);
+    klc->fill();
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Computing twisted KL polynomials ... ";
+	kl::hKLContext* hklc = new kl::hKLContext(*hblock);
+	hklc->fill();
+	std::cerr << "Done." << std::endl;
+
+	std::cerr << "Checking polynomials ... ";
+	// compare the two sets of polynomials and 
+	// test for obvious errors
+	size_t count = 0;
+	size_t hbsize = hblock->hsize();
+	for (BlockElt y=0; y<hbsize; y++) {
+		BlockElt by = hblock->hfixed(y);
+		for (BlockElt x=0; x<=y; x++) {
+			BlockElt bx = hblock->hfixed(x);
+			const kl::KLPol& pol = klc->klPol(bx,by);
+			const kl::hKLPol& hpol = hklc->getPoly(x,y);
+			if (pol != hpol) {
+				size_t d1 = pol.degree();
+				size_t d2 = hpol.degree();
+				size_t top = (d1 >= d2) ? d1 : d2;
+
+				// check the coefficients
+				for (size_t i=0; i<=top; i++) {
+					kl::hKLCoeff c1 = (i<=d1) ? pol[i] : 0;
+					kl::hKLCoeff c2 = (i<=d2) ? hpol[i] : 0;
+					if (c2 < 0) c2 = -c2;
+					if (c2 > c1) {
+            std::cerr << std::endl;
+						std::cerr << "WARNING: twisted KL coefficient exceeds regular coefficient in absolute value for P_{" << x << "," << y << "}" << std::endl;
+						std::cerr << "Aborting" << std::endl;
+						return;
+					}
+					if ((c1-c2) % 2) {
+            std::cerr << std::endl;
+						std::cerr << "WARNING: twisted KL coefficient not congruent mod 2 for P_{" << x << "," << y << "}" << std::endl;
+						std::cerr << "Aborting" << std::endl;
+						return;
+					}
+				}
+			}
+		}
+	}
+	std::cerr << "Passed!" << std::endl;
+
+	int tab = 2;
+	int width = ioutils::digits(hbsize-1,10ul);
+	strm << "Printing " << hbsize << " elements with " << hklc->getPolyList().size()-1 << " distinct polynomials:" << std::endl;
+	for (BlockElt y=0; y<hbsize; y++) {
+		bool first = true;
+		BlockElt by = hblock->hfixed(y);
+		strm << std::setw(width) << y << ": ";
+		
+		for (BlockElt x=0; x<=y; x++) {
+			BlockElt bx = hblock->hfixed(x);
+			const kl::KLPol& pol = klc->klPol(bx,by);
+			const kl::hKLPol& hpol = hklc->getPoly(x,y);
+
+			if (pol.isZero() && hpol.isZero()) continue;
+			if (first) {
+				strm << std::setw(width) << x << ": ";
+				prettyprint::printPol(strm,pol,"q");
+				if (hpol != pol) {
+					strm << std::endl;
+					strm << std::setw(2*width+2*tab) << "";
+					prettyprint::printPol(strm,hpol,"q");
+				}
+				first = false;
+			}
+			else {
+				strm << std::setw(width+tab) << "" << std::setw(width) << x << ": ";
+				prettyprint::printPol(strm,pol,"q");
+				if (hpol != pol) {
+					strm << std::endl;
+					strm << std::setw(2*width+2*tab) << "";
+					prettyprint::printPol(strm,hpol,"q");
+				}
+			}
+			strm << "" << std::endl;
+			++count;
+		}
+
+		strm << "" << std::endl;
+	}
+
+	// free memory
+	delete hblock;
+	delete klc;
+	delete hklc;
+}
+
 } // |namespace|
 
 } // |namespace atlas|
+
