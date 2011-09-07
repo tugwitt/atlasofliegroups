@@ -143,7 +143,7 @@ size_t hKLContext::findRoot(BlockElt y) {
 	const RankFlags& droots = descentSet(y);
 
 	// examine the roots
-	for (int s=0; s<rank; s++) {
+	for (weyl::Generator s=0; s<rank; s++) {
 		if (droots.test(s)) {
 			// descent root - see if its type II
 			if (cross(s,y) < ymax) {
