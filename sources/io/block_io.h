@@ -20,18 +20,16 @@ namespace atlas {
 
 /******** function declarations *********************************************/
 
+// the main output interface is via methods of |blocks::Block_base|
+
 namespace block_io {
-
-  std::ostream& print_block(std::ostream&, const Block_base&);
-
-  std::ostream& printBlockD(std::ostream&, const Block&);
 
   std::ostream& printHBlockD(std::ostream&, const hBlock&);
 
   std::ostream& printBlockU(std::ostream&, const Block&);
 
-  std::ostream& printDescent(std::ostream&, const DescentStatus&,
-		     size_t, RankFlags = RankFlags(~0ul));
+  std::ostream& printDescent(std::ostream&, const DescentStatus& ds,
+			     size_t rank, RankFlags mask = RankFlags(~0ul));
 
 }
 

@@ -17,37 +17,44 @@
 #include <iomanip>
 #include <map>
 
+#include "atlas_types.h" // here to preempt double inclusion of _fwd files
+
+#include "free_abelian.h"
+#include "permutations.h"
+#include "matreduc.h"
+
+#include "dynkin.h"
+#include "prerootdata.h"
+#include "rootdata.h"
+#include "cartanclass.h"
+#include "complexredgp.h"
+#include "realredgp.h"
+
+#include "kgb.h"
+#include "blocks.h"
+#include "klsupport.h"
+#include "kl.h"
+#include "standardrepk.h"
+#include "repr.h"
+
+#include "ioutils.h"
+#include "basic_io.h"
+#include "hkl.h"
+#include "prettyprint.h"
+#include "interactive.h"
+#include "realform_io.h"
+#include "kgb_io.h"
+#include "block_io.h"
+
+#include "commands.h"
 #include "helpmode.h"
 #include "emptymode.h"
 #include "mainmode.h"
 #include "realmode.h"
 #include "blockmode.h"
 
-#include "commands.h"
-#include "prerootdata.h"
-#include "rootdata.h"
-#include "dynkin.h"
-#include "cartanclass.h"
-#include "complexredgp.h"
-#include "realredgp.h"
-#include "interactive.h"
-#include "ioutils.h"
-#include "prettyprint.h"
-#include "kgb.h"
-#include "kgb_io.h"
-#include "blocks.h"
-#include "block_io.h"
-#include "klsupport.h"
-#include "kl.h"
-#include "kltest.h"
-#include "standardrepk.h"
-#include "repr.h"
-#include "free_abelian.h"
-#include "permutations.h"
-#include "matreduc.h"
 #include "testrun.h"
-#include "basic_io.h"
-#include "hkl.h"
+#include "kltest.h"
 
 /*****************************************************************************
 
@@ -86,6 +93,8 @@ namespace {
   void iblock_f();
   void nblock_f();
   void hblock_f();
+  void deform_f();
+  void partial_block_f();
   void embedding_f();
 
   void hkllist_f();
@@ -111,6 +120,8 @@ namespace {
   void testrun_h();
   void exam_h();
 
+  void nblock_h();
+
   // tags
   const char* test_tag = "test command (for development only)";
 
@@ -134,8 +145,10 @@ namespace {
   const char* srtest_tag = "gives information about a representation";
   const char* testrun_tag =
                 "iterates over root data of given rank, calling examine";
-  const char* examine_tag =
-    "tests if kgb and KGB commands generate identical numberings";
+  const char* examine_tag = "tests whether block is ordered by Weyl length";
+
+  const char* nblock_tag = "computes a non-integral block";
+  const char* partial_block_tag = "computes part of a non-integral block";
 
 /*
   For convenience, the "test" command is added to the mode that is flagged by
@@ -226,6 +239,8 @@ void addTestCommands<realmode::RealmodeTag>
   mode.add("examine",exam_f);
   mode.add("iblock",iblock_f);
   mode.add("nblock",nblock_f);
+  mode.add("deform",deform_f);
+  mode.add("partial_block",partial_block_f);
   mode.add("embedding",embedding_f);
 }
 
@@ -322,6 +337,7 @@ template<> void addTestHelp<realmode::RealmodeTag>
   mode.add("branch",branch_h);
   mode.add("srtest",srtest_h);
   mode.add("examine",helpmode::nohelp_h);
+  mode.add("nblock",nblock_h);
 
 
   // add additional command tags here :
@@ -334,6 +350,8 @@ template<> void addTestHelp<realmode::RealmodeTag>
   insertTag(t,"branch",branch_tag);
   insertTag(t,"srtest",srtest_tag);
   insertTag(t,"examine",examine_tag);
+  insertTag(t,"nblock",nblock_tag);
+  insertTag(t,"partial_block",partial_block_tag);
 
 }
 
@@ -374,72 +392,41 @@ namespace {
 // Print the roots in the simple root coordinates.
 void roots_rootbasis_f()
 {
-  try {
-    const RootSystem& rs =
-      mainmode::currentComplexGroup().rootSystem();
-    ioutils::OutputFile file;
+  const RootSystem& rs =  mainmode::currentComplexGroup().rootSystem();
+  ioutils::OutputFile file;
 
-    for (RootNbr i=0; i<rs.numRoots(); ++i)
-      prettyprint::printInRootBasis(file,i,rs) << std::endl;
-  }
-  catch (error::InputError& e) {
-    e("aborted");
-  }
-
+  for (RootNbr i=0; i<rs.numRoots(); ++i)
+    prettyprint::printInRootBasis(file,i,rs) << std::endl;
 }
 
 // Print the positive roots in the simple root coordinates.
 void posroots_rootbasis_f()
 
 {
-  try {
-    const RootSystem& rs =
-      mainmode::currentComplexGroup().rootSystem();
-    ioutils::OutputFile file;
+  const RootSystem& rs = mainmode::currentComplexGroup().rootSystem();
 
-    prettyprint::printInRootBasis(file,rs.posRootSet(),rs);
-  }
-  catch (error::InputError& e) {
-    e("aborted");
-  }
-
+  ioutils::OutputFile file;
+  prettyprint::printInRootBasis(file,rs.posRootSet(),rs);
 }
 
 // Print the coroots in the simple coroot coordinates.
 void coroots_rootbasis_f()
 {
-  try
-  {
-    const RootSystem rs
-      (mainmode::currentComplexGroup().dualRootSystem());
-    ioutils::OutputFile file;
+  const RootSystem rs (mainmode::currentComplexGroup().dualRootSystem());
 
-    for (RootNbr i=0; i<rs.numRoots(); ++i)
-      prettyprint::printInRootBasis(file,i,rs) << std::endl;
-  }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
+  ioutils::OutputFile file;
+  for (RootNbr i=0; i<rs.numRoots(); ++i)
+    prettyprint::printInRootBasis(file,i,rs) << std::endl;
 
 }
 
 // Print the positive coroots in the simple coroot coordinates.
 void poscoroots_rootbasis_f()
 {
-  try
-  {
-    const RootSystem rs
-      (mainmode::currentComplexGroup().dualRootSystem());
-    ioutils::OutputFile file;
+  const RootSystem rs (mainmode::currentComplexGroup().dualRootSystem());
 
-    prettyprint::printInRootBasis(file,rs.posRootSet(),rs);
-  }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
-
+  ioutils::OutputFile file;
+  prettyprint::printInRootBasis(file,rs.posRootSet(),rs);
 }
 
 // Real mode functions
@@ -759,7 +746,7 @@ void qKtypemat_f()
   assert(khc.rep_no(c.begin()->first)==sr);
 
   khc.print(std::cout << "Height of representation ",sr) << " is "
-    << khc.height(c.begin()->first) << ".\n";
+		      << khc.height(c.begin()->first) << ".\n";
   unsigned long bound=
     interactive::get_bounded_int(interactive::common_input(),
 				 "Give height bound: ",
@@ -767,70 +754,58 @@ void qKtypemat_f()
 
   ioutils::OutputFile f;
 
-  try
-  {
-    std::set<standardrepk::q_equation> singleton;
-    singleton.insert(khc.mu_equation(c.begin()->first,bound));
+  std::set<standardrepk::q_equation> singleton;
+  singleton.insert(khc.mu_equation(c.begin()->first,bound));
 
+  {
+    standardrepk::q_equation init=*singleton.begin();
+    khc.print(f << "Initial formula: mu(",khc.rep_no(init.first))
+      << ") =\n";
     {
-      standardrepk::q_equation init=*singleton.begin();
-      khc.print(f << "Initial formula: mu(",khc.rep_no(init.first))
-	<< ") =\n";
-      {
-	std::ostringstream s; khc.print(s,init.second);
-	ioutils::foldLine(f,s.str(),"+\n- ","",1) << std::endl;
-      }
+      std::ostringstream s; khc.print(s,init.second);
+      ioutils::foldLine(f,s.str(),"+\n- ","",1) << std::endl;
     }
+  }
 
 #ifdef VERBOSE
 
-    std::vector<standardrepk::q_equation> system =
-      khc.saturate(singleton,bound);
-    std::cout << "System of equations:\n";
-    for (size_t i=0; i<system.size(); ++i)
-    {
-      const standardrepk::q_equation& si=system[i];
-      khc.print(std::cout<< si.first << ' ',khc.rep_no(si.first))
-	<< " [" << khc.height(si.first) << "]\n     ";
-      for (standardrepk::q_combin::const_iterator
-	     it=si.second.begin(); it!=si.second.end(); ++it)
-	std::cout << '+' << it->second << "*I(" << it->first << ')';
-      std::cout << std::endl;
-    }
+  std::vector<standardrepk::q_equation> system =
+    khc.saturate(singleton,bound);
+  std::cout << "System of equations:\n";
+  for (size_t i=0; i<system.size(); ++i)
+  {
+    const standardrepk::q_equation& si=system[i];
+    khc.print(std::cout<< si.first << ' ',khc.rep_no(si.first))
+      << " [" << khc.height(si.first) << "]\n     ";
+    for (standardrepk::q_combin::const_iterator
+	   it=si.second.begin(); it!=si.second.end(); ++it)
+      std::cout << '+' << it->second << "*I(" << it->first << ')';
+    std::cout << std::endl;
+  }
 #endif
 
-    std::vector<standardrepk::seq_no> new_order;
+  std::vector<standardrepk::seq_no> new_order;
 
 #ifdef VERBOSE
-    matrix::Matrix_base<standardrepk::q_CharCoeff> m;
-    matrix::Matrix_base<standardrepk::q_CharCoeff> ktypemat =
-      khc.K_type_matrix(singleton,bound,new_order,&m);
+  matrix::Matrix_base<standardrepk::q_CharCoeff> m;
+  matrix::Matrix_base<standardrepk::q_CharCoeff> ktypemat =
+    khc.K_type_matrix(singleton,bound,new_order,&m);
 #else
-    matrix::Matrix_base<standardrepk::q_CharCoeff> ktypemat =
-      khc.K_type_matrix(singleton,bound,new_order,NULL);
+  matrix::Matrix_base<standardrepk::q_CharCoeff> ktypemat =
+    khc.K_type_matrix(singleton,bound,new_order,NULL);
 #endif
 
-    f << "Ordering of representations/K-types:\n";
-    for (std::vector<standardrepk::seq_no>::const_iterator
-	   it=new_order.begin(); it!=new_order.end(); ++it)
-      khc.print(f,khc.rep_no(*it)) << ", height " << khc.height(*it)
-				   << std::endl;
+  f << "Ordering of representations/K-types:\n";
+  for (std::vector<standardrepk::seq_no>::const_iterator
+	 it=new_order.begin(); it!=new_order.end(); ++it)
+    khc.print(f,khc.rep_no(*it)) << ", height " << khc.height(*it)
+				 << std::endl;
 
 #ifdef VERBOSE
-    prettyprint::printMatrix(std::cout<<"Triangular system:\n",m,3);
+  prettyprint::printMatrix(std::cout<<"Triangular system:\n",m,3);
 #endif
 
-    prettyprint::printMatrix(f<<"Matrix of K-type multiplicites:\n",ktypemat,3);
-  } // |try()|
-  catch (std::exception& e)
-  {
-    std::cerr << "error occurred: " << e.what() << std::endl;
-  }
-  catch (...)
-  {
-    std::cerr << std::endl << "unidentified error occurred" << std::endl;
-  }
-
+  prettyprint::printMatrix(f<<"Matrix of K-type multiplicites:\n",ktypemat,3);
 } // |qKtypemat_f|
 
 void mod_lattice_f()
@@ -1003,64 +978,47 @@ void qbranch_f()
 */
 void srtest_f()
 {
-  // put your code here, and define testMode at top of file appropriately
+  RealReductiveGroup& G = realmode::currentRealGroup();
+  const KGB& kgb = G.kgb();
 
-  try
-  {
-    RealReductiveGroup& G = realmode::currentRealGroup();
-    const KGB& kgb = G.kgb();
+  unsigned long x=interactive::get_bounded_int
+    (interactive::sr_input(),"Choose KGB element: ",G.kgb().size());
 
-    unsigned long x=interactive::get_bounded_int
-      (interactive::sr_input(),"Choose KGB element: ",G.kgb().size());
+  prettyprint::printVector(std::cout<<"2rho = ",G.rootDatum().twoRho())
+    << std::endl;
 
-    prettyprint::printVector(std::cout<<"2rho = ",G.rootDatum().twoRho())
-      << std::endl;
+  Weight lambda=
+    interactive::get_weight(interactive::sr_input(),
+			    "Give lambda-rho: ",
+			    G.rank());
+  standardrepk::KhatContext khc(G);
 
-    Weight lambda=
-      interactive::get_weight(interactive::sr_input(),
-			      "Give lambda-rho: ",
-			      G.rank());
-    standardrepk::KhatContext khc(G);
+  standardrepk::StandardRepK sr=khc.std_rep_rho_plus(lambda,kgb.titsElt(x));
 
-    standardrepk::StandardRepK sr=khc.std_rep_rho_plus(lambda,kgb.titsElt(x));
+  (lambda *= 2) += G.rootDatum().twoRho();
+  prettyprint::printVector(std::cout << "Weight (1/2)",lambda);
+  prettyprint::printVector(std::cout << " converted to (1/2)",khc.lift(sr));
 
-    (lambda *= 2) += G.rootDatum().twoRho();
-    prettyprint::printVector(std::cout << "Weight (1/2)",lambda);
-    prettyprint::printVector(std::cout << " converted to (1/2)",khc.lift(sr));
+  const TwistedInvolution& canonical =
+    G.complexGroup().twistedInvolution(sr.Cartan());
+  if (kgb.involution(x)!=canonical)
+    prettyprint::printWeylElt(std::cout << " at involution ",
+			      canonical, G.weylGroup());
+  std::cout << "\nHeight is " << khc.height(sr) << std::endl;
 
-    const TwistedInvolution& canonical =
-      G.complexGroup().twistedInvolution(sr.Cartan());
-    if (kgb.involution(x)!=canonical)
-      prettyprint::printWeylElt(std::cout << " at involution ",
-				canonical, G.weylGroup());
-    std::cout << "\nHeight is " << khc.height(sr) << std::endl;
-
-    khc.go(sr);
-  }
-  catch (error::MemoryOverflow& e)
-  {
-    e("error: memory overflow");
-  }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
+  khc.go(sr);
 }
 
 bool examine(RealReductiveGroup& G)
 {
-  KGB kgb1(G);
-  KGB kgb2(G,G.Cartan_set());
-  if (kgb1.size()!=kgb2.size()) return false;
-  for (size_t i=0; i<kgb1.size(); ++i)
-  {
-    for (size_t s=0; s<G.semisimpleRank(); ++s)
-    {
-      if (kgb1.cross(s,i)!=kgb2.cross(s,i)) return false;
-      if (kgb1.cayley(s,i)!=kgb2.cayley(s,i)) return false;
-    }
-    if(kgb1.status(i)!=kgb2.status(i)) return false;
-  }
+  const WeylGroup& W = G.weylGroup();
+  const KGB& kgb=G.kgb();
+  size_t l = W.length(kgb.involution(0)),t;
+  for (size_t i=1; i<kgb.size(); ++i)
+    if ((t=W.length(kgb.involution(i)))<l)
+      return false;
+    else
+      l=t;
   return true;
 }
 
@@ -1068,24 +1026,32 @@ void testrun_f()
 {
   unsigned long rank=interactive::get_bounded_int
     (interactive::common_input(),"rank: ",constants::RANK_MAX+1);
-  std::cout << "Testing agreement of kgb and KGB:\n";
+  std::cout << "Testing W-length monotonicity.\n";
   for (testrun::LieTypeIterator it(testrun::Semisimple,rank); it(); ++it)
   {
     std::cout<< *it << std::endl;
     size_t count=0;
     for (testrun::CoveringIterator cit(*it); cit(); ++cit)
     {
-      if (count>0) std::cout << ',' << std::flush;
-      RootDatum rd(*cit);
-      WeightInvolution id(rd.rank()); // identity
-      ComplexReductiveGroup G(rd,id);
+      if (count>0) std::cout << ',';
+      std::cout << ++count;
+      PreRootDatum prd = *cit;
+      WeightInvolution id(prd.rank()); // identity
+      ComplexReductiveGroup G(prd,id);
       for (RealFormNbr rf=0; rf<G.numRealForms(); ++rf)
       {
 	RealReductiveGroup G_R(G,rf);
 	if (not examine(G_R))
-	  std::cout << "Failure at real form " << rf << std::endl;
+	{
+	  lietype::InnerClassType ict;
+	  for (size_t i=0; i<it->size(); ++i)
+	    ict.push_back('e');
+	  lietype::Layout lay(*it,ict);
+	  realform_io::Interface itf(G,lay);
+	  std::cout << " Failure at real form " << itf.out(rf) << std::endl;
+	}
+	std::cout << std::flush;
       }
-      std::cout << ++count;
     }
     std::cout << '.' << std::endl;
   }
@@ -1094,8 +1060,9 @@ void testrun_f()
 
 void exam_f()
 {
-  std::cout << "kgb and KGB "
-            << (examine(realmode::currentRealGroup()) ? "agree" : "differ")
+  std::cout << "W-length monotine in KGB? "
+            << (examine(realmode::currentRealGroup())
+		? "yes" : "no")
 	    << std::endl;
 }
 
@@ -1109,196 +1076,372 @@ void X_f()
 
 void iblock_f()
 {
-  try
-  {
-    RealReductiveGroup& GR = realmode::currentRealGroup();
-    ComplexReductiveGroup& G = GR.complexGroup();
-    const RootDatum& rd = G.rootDatum();
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  ComplexReductiveGroup& G = GR.complexGroup();
+  const RootDatum& rd = G.rootDatum();
 
-    Weight lambda_rho =
-      interactive::get_weight(interactive::sr_input(),
-			      "Give lambda-rho: ",
-			      G.rank());
+  Weight lambda_rho =
+    interactive::get_weight(interactive::sr_input(),
+			    "Give lambda-rho: ",
+			    G.rank());
 
-    RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
+  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
 
 
-    RatWeight nu=
-      interactive::get_ratweight
-      (interactive::sr_input(),"rational parameter nu: ",rd.rank());
+  RatWeight nu=
+    interactive::get_ratweight
+    (interactive::sr_input(),"rational parameter nu: ",rd.rank());
 
-    const KGB& kgb = GR.kgb();
-    unsigned long x=interactive::get_bounded_int
-      (interactive::common_input(),"KGB element: ",kgb.size());
+  const KGB& kgb = GR.kgb();
+  unsigned long x=interactive::get_bounded_int
+    (interactive::common_input(),"KGB element: ",kgb.size());
 
-    WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
+  WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
 
-    nu = RatWeight // make |nu| fixed by $-\theta$
-      (nu.numerator()- theta*nu.numerator(),2*nu.denominator());
+  nu = RatWeight // make |nu| fixed by $-\theta$
+    (nu.numerator()- theta*nu.numerator(),2*nu.denominator());
 
-    RatWeight gamma = nu + RatWeight
+  RatWeight gamma = nu + RatWeight
     (lambda.numerator()+theta*lambda.numerator(),2*lambda.denominator());
 
-    ioutils::OutputFile f;
-    f << "Infinitesimal character is " << gamma << std::endl;
+  ioutils::OutputFile f;
+  f << "Infinitesimal character is " << gamma << std::endl;
 
-    SubSystem sub = SubSystem::integral(rd,gamma);
+  SubSystem sub = SubSystem::integral(rd,gamma);
 
-    WeylWord ww;
-    weyl::Twist twist = sub.twist(theta,ww);
+  WeylWord ww;
+  weyl::Twist twist = sub.twist(theta,ww);
 
-    Permutation pi;
+  Permutation pi;
 
-    f << "Subsystem on dual side is ";
-    if (sub.rank()==0)
-      f << "empty.\n";
-    else
-    {
-      f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-	<< ", with roots ";
-      for (weyl::Generator s=0; s<sub.rank(); ++s)
-	f << sub.parent_nr_simple(pi[s]) << (s<sub.rank()-1 ? "," : ".\n");
-    }
-    f << "Twisted involution in subsystem: " << ww << ".\n";
-
-    BlockElt z;
-    blocks::gamma_block block(GR,sub,x,lambda,gamma,z);
-
-    f << "Given parameters define element " << z
-      << " of the following block:" << std::endl;
-
-    block_io::print_block(f,block);
-
-  }
-  catch (error::MemoryOverflow& e)
+  f << "Subsystem on dual side is ";
+  if (sub.rank()==0)
+    f << "empty.\n";
+  else
   {
-    e("error: memory overflow");
+    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
+      << ", with roots ";
+    for (weyl::Generator s=0; s<sub.rank(); ++s)
+      f << sub.parent_nr_simple(pi[s]) << (s<sub.rank()-1 ? "," : ".\n");
   }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "error occurrend: " << e.what() << std::endl;
-  }
-  catch (...)
-  {
-    std::cerr << std::endl << "unidentified error occurred" << std::endl;
-  }
+  f << "Twisted involution in subsystem: " << ww << ".\n";
+
+  BlockElt z;
+  blocks::gamma_block block(GR,sub,x,lambda,gamma,z);
+
+  f << "Given parameters define element " << z
+    << " of the following block:" << std::endl;
+
+  block.print_to(f,false);
+
 } // |iblock_f|
 
 void nblock_f()
 {
-  try
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  ComplexReductiveGroup& G = GR.complexGroup();
+  const RootDatum& rd = G.rootDatum();
+
+  Weight lambda_rho;
+  RatWeight gamma(0);
+  KGBElt x;
+
+  SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
+  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
+  lambda.normalize();
+
+  ioutils::OutputFile f;
+  f << "x = " << x << ", gamma = " << gamma
+    << ", lambda = " << lambda << std::endl;
+
+  WeightInvolution theta =
+    GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
+
+  WeylWord ww;
+  weyl::Twist twist = sub.twist(theta,ww);
+
+  Permutation pi;
+
+  f << "Subsystem on dual side is ";
+  if (sub.rank()==0)
+    f << "empty.\n";
+  else
   {
-    RealReductiveGroup& GR = realmode::currentRealGroup();
-    ComplexReductiveGroup& G = GR.complexGroup();
-    const RootDatum& rd = G.rootDatum();
+    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
+      << ", with roots ";
+    for (weyl::Generator s=0; s<sub.rank(); ++s)
+      f << sub.parent_nr_simple(pi[s])
+	<< (s<sub.rank()-1 ? "," : ".\n");
+  }
 
-    Weight lambda_rho;
-    RatWeight gamma(0);
-    KGBElt x;
+  BlockElt z;
+  blocks::non_integral_block block(GR,sub,x,lambda,gamma,z);
 
-    interactive::get_parameter(GR,x,lambda_rho,gamma);
-    RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
-    lambda.normalize();
+  f << "Given parameters define element " << z
+    << " of the following block:" << std::endl;
 
-    ioutils::OutputFile f;
-    f << "x = " << x << ", gamma = " << gamma
-	      << ", lambda = " << lambda << std::endl;
+  block.print_to(f,false);
+  kl::KLContext klc(block);
+  klc.fill(z,false); // silent filling of the KL table
 
-    SubSystem sub = SubSystem::integral(rd,gamma);
-
-
-    WeightInvolution theta =
-      GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
-
-    WeylWord ww;
-    weyl::Twist twist = sub.twist(theta,ww);
-
-    Permutation pi;
-
-    f << "Subsystem on dual side is ";
-    if (sub.rank()==0)
-      f << "empty.\n";
-    else
+  typedef Polynomial<int> Poly;
+  typedef std::map<BlockElt,Poly> map_type;
+  map_type acc; // non-zero $x'\mapsto\sum_{x\downarrow x'}\eps(z/x)P_{x,z}$
+  unsigned int parity = block.length(z)%2;
+  for (size_t x = 0; x <= z; ++x)
+  {
+    const kl::KLPol& pol = klc.klPol(x,z);
+    if (not pol.isZero())
     {
-      f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-	<< ", with roots ";
-      for (weyl::Generator s=0; s<sub.rank(); ++s)
-	f << sub.parent_nr_simple(pi[s])
-	  << (s<sub.rank()-1 ? "," : ".\n");
-    }
-
-    BlockElt z;
-    blocks::non_integral_block block(GR,sub,x,lambda,gamma,z);
-
-    f << "Given parameters define element " << z
-      << " of the following block:" << std::endl;
-
-    block_io::print_block(f,block);
-    kl::KLContext klc(block);
-    klc.fill(z,false);
-
-    typedef Polynomial<int> Poly;
-    typedef std::map<BlockElt,Poly> map_type;
-    map_type acc;
-    unsigned int parity = block.length(z)%2;
-    for (size_t x = 0; x <= z; ++x)
-    {
-      const kl::KLPol& pol = klc.klPol(x,z);
-      if (not pol.isZero())
+      Poly p(pol); // convert
+      if (block.length(x)%2!=parity)
+	p*=-1;
+      BlockEltList nb=block.nonzeros_below(x);
+      for (size_t i=0; i<nb.size(); ++i)
       {
-	Poly p(pol); // convert
-	if (block.length(x)%2!=parity)
-	  p*=-1;
-	BlockEltList nb=block.nonzeros_below(x);
-	for (size_t i=0; i<nb.size(); ++i)
-	{
-	  std::pair<map_type::iterator,bool> trial = 
-	    acc.insert(std::make_pair(nb[i],p));
-	  if (not trial.second) // failed to create a new entry
-	    trial.first->second += p;
-	} // |for (i)| in |nb|
-      } // |if(pol!=0)|
-    } // |for (x<=z)|
+	std::pair<map_type::iterator,bool> trial =
+	  acc.insert(std::make_pair(nb[i],p));
+	if (not trial.second) // failed to create a new entry
+	  trial.first->second += p;
+      } // |for (i)| in |nb|
+    } // |if(pol!=0)|
+  } // |for (x<=z)|
 
 
-    f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
-      << "KL polynomials (-1)^{l(" << z << ")-l(x)}*P_{x," << z << "}:\n";
-    int width = ioutils::digits(z,10ul);
-    for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
+  f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
+    << "KL polynomials (-1)^{l(" << z << ")-l(x)}*P_{x," << z << "}:\n";
+  int width = ioutils::digits(z,10ul);
+  for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
+  {
+    BlockElt x = it->first;
+    const Poly& pol = it->second;
+    if (not pol.isZero())
     {
-      BlockElt x = it->first;
-      const Poly& pol = it->second;
-      if (not pol.isZero())
-      {
-    	f << std::setw(width) << x << ": ";
-    	prettyprint::printPol(f,pol,"q") << std::endl;
-      }
+      f << std::setw(width) << x << ": ";
+      prettyprint::printPol(f,pol,"q") << std::endl;
     }
-
-  }
-  catch (error::MemoryOverflow& e)
-  {
-    e("error: memory overflow");
-  }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "error occurrend: " << e.what() << std::endl;
-  }
-  catch (...)
-  {
-    std::cerr << std::endl << "unidentified error occurred" << std::endl;
   }
 } // |nblock_f|
 
-tits::TorusElement torus_part
+void deform_f()
+{
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  ComplexReductiveGroup& G = GR.complexGroup();
+  const RootDatum& rd = G.rootDatum();
+
+  Weight lambda_rho;
+  RatWeight gamma(0);
+  KGBElt x;
+
+  SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
+  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
+  lambda.normalize();
+
+  ioutils::OutputFile f;
+  f << "x = " << x << ", gamma = " << gamma
+    << ", lambda = " << lambda << std::endl;
+
+  WeightInvolution theta =
+    GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
+
+  WeylWord ww;
+  weyl::Twist twist = sub.twist(theta,ww);
+
+  Permutation pi;
+
+  f << "Subsystem on dual side is ";
+  if (sub.rank()==0)
+    f << "empty.\n";
+  else
+  {
+    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
+      << ", with roots ";
+    for (weyl::Generator s=0; s<sub.rank(); ++s)
+      f << sub.parent_nr_simple(pi[s])
+	<< (s<sub.rank()-1 ? "," : ".\n");
+  }
+
+  BlockElt entry_elem;
+  blocks::non_integral_block block(GR,sub,x,lambda,gamma,entry_elem);
+
+  f << "Given parameters define element " << entry_elem
+    << " of the following block:" << std::endl;
+
+  block.print_to(f,false);
+  kl::KLContext klc(block);
+  klc.fill(entry_elem,false); // silent filling of the KL table
+
+  std::vector<BlockElt> non_zeros; non_zeros.reserve(entry_elem+1);
+  for (BlockElt x=0; x<=entry_elem; ++x)
+    if (block.is_nonzero(x))
+      non_zeros.push_back(x);
+
+  BlockElt nnz = non_zeros.size(); // |BlockElt| indexes singlular "block"
+
+  repr::Rep_context RC(GR);
+  std::vector<unsigned int> orient_nr(nnz);
+  for (BlockElt z=0; z<nnz; ++z)
+  {
+    BlockElt zz=non_zeros[z];
+    repr::StandardRepr r =
+      RC.sr(block.parent_x(zz),block.lambda_rho(zz),gamma);
+    orient_nr[z] = RC.orientation_number(r);
+  }
+
+  typedef Polynomial<int> Poly;
+  typedef matrix::Matrix_base<Poly> PolMat;
+
+  PolMat P(nnz,nnz,Poly(0)), Q(nnz,nnz,Poly(0));
+
+  for (BlockElt z=nnz; z-->0; )
+  {
+    BlockElt zz=non_zeros[z];
+    unsigned int parity = block.length(zz)%2;
+    for (BlockElt xx=0; xx <= zz; ++xx)
+    {
+      const kl::KLPol& pol = klc.klPol(xx,zz);
+      if (not pol.isZero())
+      {
+	Poly p(pol); // convert
+	if (block.length(xx)%2!=parity)
+	  p*=-1;
+	BlockEltList nb=block.nonzeros_below(xx);
+	for (size_t i=0; i<nb.size(); ++i)
+	{
+	  BlockElt x = std::lower_bound
+	    (non_zeros.begin(),non_zeros.end(),nb[i])-non_zeros.begin();
+	  assert(non_zeros[x]==nb[i]); // found
+	  if (P(x,z).isZero())
+	    P(x,z)=p;
+	  else
+	    P(x,z)+=p;
+	} // |for (i)| in |nb|
+      } // |if(pol!=0)|
+    } // |for (x<=z)|
+  } // for |z|
+
+    // now compute polynomials $Q_{x,z}$, for |y<=z<=entry_elem|
+  for (BlockElt x=0; x<nnz; ++x)
+  {
+    Q(x,x)=Poly(1);
+    for (BlockElt z=x+1; z<nnz; ++z)
+    {
+      Poly sum; // initially zero; $-\sum{x\leq y<z}Q_{x,y}P^\pm_{y,z}$
+      for (BlockElt y=x; y<z; ++y)
+	sum -= Q(x,y)*P(y,z);
+      Q(x,z)=sum;
+    }
+  }
+
+  f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
+    << "KL polynomials (-1)^{l(y)-l(x)}*P_{x,y}:\n";
+  int width = ioutils::digits(entry_elem,10ul);
+  for (BlockElt y=0; y<nnz; ++y)
+    for (BlockElt x=0; x<=y; ++x)
+      if (not P(x,y).isZero())
+      {
+	f << std::setw(width) << non_zeros[x] << ',' << non_zeros[y] << ": ";
+	prettyprint::printPol(f,P(x,y),"q") << std::endl;
+      }
+
+  f << "dual KL polynomials Q_{x,y}:\n";
+  for (BlockElt y=0; y<nnz; ++y)
+    for (BlockElt x=0; x<=y; ++x)
+    {
+      Poly& pol = Q(x,y);
+      if (not pol.isZero())
+      {
+	f << std::setw(width) << non_zeros[x] << ',' << non_zeros[y] << ": ";
+	prettyprint::printPol(f,pol,"q") << std::endl;
+      }
+    }
+
+  f << "Orientation numbers:\n";
+  for (BlockElt y=0; y<nnz; ++y)
+    f << non_zeros[y] << ": " << orient_nr[y] << (y+1<nnz ? ", " : ".\n");
+
+  if (block.is_nonzero(entry_elem))
+  {
+    BlockElt z=nnz-1;
+    assert(non_zeros[z]==entry_elem);
+    unsigned odd = (block.length(entry_elem)+1)%2; // opposite to |entry_elem|
+
+    Poly s(1,1); // in fact $X$, will reduce modulo $X^2+1$ later
+    f << "Deformation terms for I(" << entry_elem << ")_c:\n";
+    for (BlockElt x=nnz-1; x-->0; ) // skip |entry_elem|
+    {
+      Poly sum;
+      for (BlockElt y=x; y<nnz-1; ++y)
+	if (block.length(non_zeros[y])%2==odd)
+	  sum += P(x,y)*Q(y,z);
+      // now evaluate |sum| at $X=-1$ to get "real" part of $(1-s)*sum[X:=s]$
+      int eval=0;
+      for (polynomials::Degree d=sum.size(); d-->0; )
+	eval = sum[d]-eval;
+
+      // if (orientation_difference(x,z)) sum*=s;
+      int orient_exp = (orient_nr[nnz-1]-orient_nr[x])/2;
+      if (orient_exp%2!=0)
+	eval = -eval;
+
+      if (eval!=0)
+      {
+	f << " +(" << std::resetiosflags(std::ios_base::showpos) << eval;
+	if (eval==1 or eval==-1)
+	  f << (eval==1 ? '-' : '+'); // sign of |-eval|
+	else
+	  f << std::setiosflags(std::ios_base::showpos) << -eval;
+	f <<"s)I(" << non_zeros[x] << ")_c";
+      }
+    }
+    static_cast<std::ostream&>(f) << std::endl;
+  }
+} // |deform_f|
+
+void partial_block_f()
+{
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  ComplexReductiveGroup& G = GR.complexGroup();
+  const RootDatum& rd = G.rootDatum();
+
+  Weight lambda_rho;
+  RatWeight gamma(0);
+  KGBElt x;
+
+  SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
+  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
+  lambda.normalize();
+
+  ioutils::OutputFile f;
+  f << "x = " << x << ", gamma = " << gamma
+    << ", lambda = " << lambda << std::endl;
+
+  WeightInvolution theta =
+    GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
+
+  WeylWord ww;
+  weyl::Twist twist = sub.twist(theta,ww);
+
+  Permutation pi;
+
+  f << "Subsystem on dual side is ";
+  if (sub.rank()==0)
+    f << "empty.\n";
+  else
+  {
+    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
+      << ", with roots ";
+    for (weyl::Generator s=0; s<sub.rank(); ++s)
+      f << sub.parent_nr_simple(pi[s])
+	<< (s<sub.rank()-1 ? "," : ".\n");
+  }
+
+  blocks::non_integral_block block(GR,sub,x,lambda,gamma);
+  block.print_to(f,false);
+} // |partial_block_f|
+
+
+TorusElement torus_part
   (const RootDatum& rd,
    const WeightInvolution& theta,
    const RatWeight& lambda, // discrete parameter
@@ -1315,199 +1458,152 @@ tits::TorusElement torus_part
       cumul+=rd.root(*it);
   // now |cumul| is $2\rho_\Re(G)-2\rho_\Re(G(\gamma))$
 
-  return tits::exp_pi(gamma-lambda+RatWeight(cumul,2));
+  return y_values::exp_pi(gamma-lambda+RatWeight(cumul,2));
 }
 
 void embedding_f()
 {
-  try
-  {
-    RealReductiveGroup& GR = realmode::currentRealGroup();
-    ComplexReductiveGroup& G = GR.complexGroup();
-    const RootDatum& rd = G.rootDatum();
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  ComplexReductiveGroup& G = GR.complexGroup();
+  const RootDatum& rd = G.rootDatum();
 
-    Weight lambda_rho =
-      interactive::get_weight(interactive::sr_input(),"Give lambda-rho: ",
-			      G.rank());
+  Weight lambda_rho =
+    interactive::get_weight(interactive::sr_input(),"Give lambda-rho: ",
+			    G.rank());
 
-    RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
+  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
 
-    RatWeight nu=
-      interactive::get_ratweight
-      (interactive::sr_input(),"rational parameter nu: ",rd.rank());
+  RatWeight nu=
+    interactive::get_ratweight
+    (interactive::sr_input(),"rational parameter nu: ",rd.rank());
 
-    const KGB& kgb = GR.kgb();
-    unsigned long x=interactive::get_bounded_int
-      (interactive::common_input(),"KGB element: ",kgb.size());
+  const KGB& kgb = GR.kgb();
+  unsigned long x=interactive::get_bounded_int
+    (interactive::common_input(),"KGB element: ",kgb.size());
 
-    WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
+  WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
 
-    nu = RatWeight // make |nu| fixed by $-\theta$
-      (nu.numerator()- theta*nu.numerator(),2*nu.denominator());
+  nu = RatWeight // make |nu| fixed by $-\theta$
+    (nu.numerator()- theta*nu.numerator(),2*nu.denominator());
 
-    RatWeight gamma = nu + RatWeight
+  RatWeight gamma = nu + RatWeight
     (lambda.numerator()+theta*lambda.numerator(),2*lambda.denominator());
 
-    ioutils::OutputFile f;
-    f << "Infinitesimal character is " << gamma << std::endl;
+  ioutils::OutputFile f;
+  f << "Infinitesimal character is " << gamma << std::endl;
 
-    SubSystem sub = SubSystem::integral(rd,gamma);
+  SubSystem sub = SubSystem::integral(rd,gamma);
 
-    WeylWord ww;
-    const tits::SubTitsGroup sub_gTg
-      (G,sub,G.involutionMatrix(kgb.involution(x)),ww);
+  WeylWord ww;
+  const tits::SubTitsGroup sub_gTg
+    (G,sub,G.involutionMatrix(kgb.involution(x)),ww);
 
-    Permutation pi;
+  Permutation pi;
 
-    f << "Subsystem on dual side is ";
-    if (sub.rank()==0)
-      f << "empty.\n";
-    else
+  f << "Subsystem on dual side is ";
+  if (sub.rank()==0)
+    f << "empty.\n";
+  else
+  {
+    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
+      << ", with roots ";
+    for (weyl::Generator s=0; s<sub.rank(); ++s)
+      f << sub.parent_nr_simple(pi[s]) << (s<sub.rank()-1 ? "," : ".\n");
+  }
+  f << "Twisted involution in subsystem: " << ww << ".\n";
+
+  weyl::TI_Entry::Pooltype pool;
+  hashtable::HashTable<weyl::TI_Entry,unsigned int> hash_table(pool);
+  std::vector<unsigned int> stops;
+  {
+    std::vector<TwistedInvolution> queue(1,TwistedInvolution());
+    size_t qi = 0; // |queue| inspected up to |qi|
+    const TwistedWeylGroup& tW = sub_gTg; // base object, subgroup
+
+    while (qi<queue.size())
     {
-      f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-	<< ", with roots ";
-      for (weyl::Generator s=0; s<sub.rank(); ++s)
-	f << sub.parent_nr_simple(pi[s]) << (s<sub.rank()-1 ? "," : ".\n");
-    }
-    f << "Twisted involution in subsystem: " << ww << ".\n";
-
-    weyl::TI_Entry::Pooltype pool;
-    hashtable::HashTable<weyl::TI_Entry,unsigned int> hash_table(pool);
-    std::vector<unsigned int> stops;
-    {
-      std::vector<TwistedInvolution> queue(1,TwistedInvolution());
-      size_t qi = 0; // |queue| inspected up to |qi|
-      const TwistedWeylGroup& tW = sub_gTg; // base object, subgroup
-
-      while (qi<queue.size())
-      {
-	weyl::TI_Entry tw=queue[qi++];
-	if (hash_table.find(tw)==hash_table.empty) // Cartan class not seen yet
-	{ stops.push_back(hash_table.size());
-	  // generate like kgb::FiberData::complete_class|
-	  for (unsigned int i=hash_table.match(tw); i<hash_table.size(); ++i)
-	  {
-	    tw=pool[i];
-	    for (weyl::Generator s=0; s<tW.rank(); ++s)
-	      if (tW.hasTwistedCommutation(s,tw)) // |s| real or imaginary
-	      {
-		if (not tW.hasDescent(s,tw)) // |s| imaginary
-		  queue.push_back(tW.prod(s,tw));
-	      }
-	      else // |s| complex
-		hash_table.match(tW.twistedConjugated(tw,s));
-	  } // |for(i)|
-	} // |if| new Cartan class
-      } // |while| queue not completely inspected
-    } // forget |queue|
-    stops.push_back(~0); // sentinel
-    size_t si=0; // index into |stops|
-    for (unsigned int i=0; i<pool.size(); ++i)
-    {
-      if (i==stops[si])
-      { (std::ostream&)f << std::endl; ++si; } // separate classes
-      TwistedInvolution tw=pool[i];
-      f << sub_gTg.base_point_offset(tw).log_2pi()
-	<< "  \t@  " << sub_gTg.word(tw) <<std::endl;
-    }
-  }
-  catch (error::MemoryOverflow& e)
+      weyl::TI_Entry tw=queue[qi++];
+      if (hash_table.find(tw)==hash_table.empty) // Cartan class not seen yet
+      { stops.push_back(hash_table.size());
+	// generate like kgb::FiberData::complete_class|
+	for (unsigned int i=hash_table.match(tw); i<hash_table.size(); ++i)
+	{
+	  tw=pool[i];
+	  for (weyl::Generator s=0; s<tW.rank(); ++s)
+	    if (tW.hasTwistedCommutation(s,tw)) // |s| real or imaginary
+	    {
+	      if (not tW.hasDescent(s,tw)) // |s| imaginary
+		queue.push_back(tW.prod(s,tw));
+	    }
+	    else // |s| complex
+	      hash_table.match(tW.twistedConjugated(tw,s));
+	} // |for(i)|
+      } // |if| new Cartan class
+    } // |while| queue not completely inspected
+  } // forget |queue|
+  stops.push_back(~0); // sentinel
+  size_t si=0; // index into |stops|
+  for (unsigned int i=0; i<pool.size(); ++i)
   {
-    e("error: memory overflow");
-  }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "error occurrend: " << e.what() << std::endl;
-  }
-  catch (...)
-  {
-    std::cerr << std::endl << "unidentified error occurred" << std::endl;
+    if (i==stops[si])
+    { (std::ostream&)f << std::endl; ++si; } // separate classes
+    TwistedInvolution tw=pool[i];
+    f << sub_gTg.base_point_offset(tw).log_2pi()
+      << "  \t@  " << sub_gTg.word(tw) <<std::endl;
   }
 } // |embedding_f|
 
 void test_f()
 {
-  try
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  ComplexReductiveGroup& G = GR.complexGroup();
+  const RootDatum& rd = G.rootDatum();
+
+  RatWeight nu=
+    interactive::get_ratweight
+    (interactive::sr_input(),"rational weight nu: ",rd.rank());
+
+  const KGB& kgb = GR.kgb();
+  unsigned long x=interactive::get_bounded_int
+    (interactive::common_input(),"KGB element: ",kgb.size());
+
+  WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
+
+  nu = RatWeight
+    (nu.numerator() - theta*nu.numerator(),2*nu.denominator());
+
+  std::cout << "Made -theta fixed, nu = " << nu << std::endl;
+  RatWeight gamma(rd.twoRho()+theta*rd.twoRho(),4);
+  // assume |lambda=rho| for a valid value
+  gamma += nu;
+  std::cout << "added discrete series contribution, gamma = " << gamma
+	    << std::endl;
+
+  subdatum::SubDatum sub (GR,gamma,x);
+
+  WeylWord ww;
+  weyl::Twist twist = sub.twist(theta,ww);
+
+  Permutation pi;
+
+  std::cout << "Subsystem on dual side is ";
+  if (sub.semisimple_rank()==0)
+    std::cout << "empty.\n";
+  else
   {
-    RealReductiveGroup& GR = realmode::currentRealGroup();
-    ComplexReductiveGroup& G = GR.complexGroup();
-    const RootDatum& rd = G.rootDatum();
-
-    RatWeight nu=
-      interactive::get_ratweight
-      (interactive::sr_input(),"rational weight nu: ",rd.rank());
-
-    const KGB& kgb = GR.kgb();
-    unsigned long x=interactive::get_bounded_int
-      (interactive::common_input(),"KGB element: ",kgb.size());
-
-    WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
-
-    nu = RatWeight
-      (nu.numerator() - theta*nu.numerator(),2*nu.denominator());
-
-    std::cout << "Made -theta fixed, nu = " << nu << std::endl;
-    RatWeight gamma(rd.twoRho()+theta*rd.twoRho(),4);
-    // assume |lambda=rho| for a valid value
-    gamma += nu;
-    std::cout << "added discrete series contribution, gamma = " << gamma
-	      << std::endl;
-
-    subdatum::SubDatum sub (GR,gamma,x);
-
-    WeylWord ww;
-    weyl::Twist twist = sub.twist(theta,ww);
-
-    Permutation pi;
-
-    std::cout << "Subsystem on dual side is ";
-    if (sub.semisimple_rank()==0)
-      std::cout << "empty.\n";
-    else
-    {
-      std::cout << "of type "
-		<< dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-		<< ", with roots ";
-      for (weyl::Generator s=0; s<sub.semisimple_rank(); ++s)
-	std::cout << sub.parent_nr_simple(pi[s])
-		  << (s<sub.semisimple_rank()-1 ? "," : ".\n");
-    }
-
-    std::cout << "Twisted involution in subsystem: " << ww ;
-    WeylElt w = sub.Weyl_group().element(ww);
-    sub.Weyl_group().mult(w,sub.Weyl_group().longest());
-    prettyprint::printWeylElt(std::cout << " (reversed to ",w,sub.Weyl_group())
-			      << " in list below).\n";
-
-    // prettyprint::printWeylElt
-    //   (std::cout << "that's ",sub.init_twisted(),sub.Weyl_group())
-    //   << std::endl;
-
-    kgb::subsys_KGB sub_KGB(kgb,sub,x);
-
-    kgb_io::print(std::cout,sub_KGB);
-
+    std::cout << "of type "
+	      << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
+	      << ", with roots ";
+    for (weyl::Generator s=0; s<sub.semisimple_rank(); ++s)
+      std::cout << sub.parent_nr_simple(pi[s])
+		<< (s<sub.semisimple_rank()-1 ? "," : ".\n");
   }
-  catch (error::MemoryOverflow& e)
-  {
-    e("error: memory overflow");
-  }
-  catch (error::InputError& e)
-  {
-    e("aborted");
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "error occurrend: " << e.what() << std::endl;
-  }
-  catch (...)
-  {
-    std::cerr << std::endl << "unidentified error occurred" << std::endl;
-  }
+
+  std::cout << "Twisted involution in subsystem: " << ww << std::endl;
+
+  kgb::subsys_KGB sub_KGB(kgb,sub,x);
+
+  kgb_io::print(std::cout,sub_KGB);
 } // |test_f|
 
 
@@ -1517,107 +1613,109 @@ void hblock_f()
 {
   try
   {
-	RealReductiveGroup& GR = realmode::currentRealGroup();
+    RealReductiveGroup& GR = realmode::currentRealGroup();
     RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
     ioutils::OutputFile f;
-    KGB kgb(GR);
-    KGB dual_kgb(dual_GR);
+    const KGB& kgb = GR.kgb();
+    const KGB& dual_kgb = dual_GR.kgb();
     blocks::hBlock block = hBlock(kgb, dual_kgb);
 
-     block_io::printHBlockD(f,block);
-  
-    Block* block_pointer = new Block(Block::build(realmode::currentRealGroup(),blockmode::currentDualRealGroup()));
-	kl::KLContext* klc_pointer=new kl::KLContext(*block_pointer);
+    block_io::printHBlockD(f,block);
+
+    Block* block_pointer = new Block
+      (Block::build(realmode::currentRealGroup(),
+		    blockmode::currentDualRealGroup()));
+    kl::KLContext* klc_pointer=new kl::KLContext(*block_pointer);
     klc_pointer->fill();
 
-	size_t hbsize = block.hsize();
-	size_t klsize = klc_pointer->size();
-	std::vector<bool> flags(klsize,false);
-	for (size_t i=0; i<hbsize; i++) {
-		BlockElt j = block.hfixed(i);
-		flags[j] = true;
-	}
-  
-  size_t count = 0;
-  int width = ioutils::digits(klc_pointer->size()-1,10ul);
-  int tab = 2;
-
-  for (size_t y = 0; y < klc_pointer->size(); ++y)
-  {
-
-    f << std::setw(width) << y << ": ";
-    bool first = true;
-
-	if (flags[y]) {
-    for (size_t x = 0; x <= y; ++x) {
-		if (flags[x]) {
-      const kl::KLPol& pol = klc_pointer->klPol(x,y);
-      if (pol.isZero())
-	continue;
-      if (first)
-      {
-	f << std::setw(width) << x << ": ";
-	first = false;
-      }
-      else
-      {
-	f << std::setw(width+tab)<< ""
-	     << std::setw(width) << x << ": ";
-      }
-      prettyprint::printPol(f,pol,"q");
-      f << "" << std::endl;
-      ++count;
-		}
+    size_t hbsize = block.hsize();
+    size_t klsize = klc_pointer->size();
+    std::vector<bool> flags(klsize,false);
+    for (size_t i=0; i<hbsize; i++) {
+      BlockElt j = block.hfixed(i);
+      flags[j] = true;
     }
 
-    f << "" << std::endl;
+    size_t count = 0;
+    int width = ioutils::digits(klc_pointer->size()-1,10ul);
+    int tab = 2;
+
+    for (size_t y = 0; y < klc_pointer->size(); ++y)
+    {
+
+      f << std::setw(width) << y << ": ";
+      bool first = true;
+
+      if (flags[y]) {
+	for (size_t x = 0; x <= y; ++x) {
+	  if (flags[x]) {
+	    const kl::KLPol& pol = klc_pointer->klPol(x,y);
+	    if (pol.isZero())
+	      continue;
+	    if (first)
+	    {
+	      f << std::setw(width) << x << ": ";
+	      first = false;
+	    }
+	    else
+	    {
+	      f << std::setw(width+tab)<< ""
+		<< std::setw(width) << x << ": ";
+	    }
+	    prettyprint::printPol(f,pol,"q");
+	    f << "" << std::endl;
+	    ++count;
+	  }
 	}
-	else {
-		f << std::setw(width) << y << ": 1" << std::endl << std::endl;
-	}
-  }
+
+	f << "" << std::endl;
+      }
+      else {
+	f << std::setw(width) << y << ": 1" << std::endl << std::endl;
+      }
+    }
 
     /*
-    kl::KLContext klc(block);
-    klc.fill(z,false);
+      kl::KLContext klc(block);
+      klc.fill(z,false);
 
-    typedef Polynomial<int> Poly;
-    typedef std::map<BlockElt,Poly> map_type;
-    map_type acc;
-    unsigned int parity = block.length(z)%2;
-    for (size_t x = 0; x <= z; ++x)
-    {
+      typedef Polynomial<int> Poly;
+      typedef std::map<BlockElt,Poly> map_type;
+      map_type acc;
+      unsigned int parity = block.length(z)%2;
+      for (size_t x = 0; x <= z; ++x)
+      {
       const kl::KLPol& pol = klc.klPol(x,z);
       if (not pol.isZero())
       {
-	Poly p(pol); // convert
-	if (block.length(x)%2!=parity)
-	  p*=-1;
-	BlockEltList nb=block.nonzeros_below(x);
-	for (size_t i=0; i<nb.size(); ++i)
-	{
-	  std::pair<map_type::iterator,bool> trial = 
-	    acc.insert(std::make_pair(nb[i],p));
-	  if (not trial.second) // failed to create a new entry
-	    trial.first->second += p;
-	} // |for (i)| in |nb|
+      Poly p(pol); // convert
+      if (block.length(x)%2!=parity)
+      p*=-1;
+      BlockEltList nb=block.nonzeros_below(x);
+      for (size_t i=0; i<nb.size(); ++i)
+      {
+      std::pair<map_type::iterator,bool> trial =
+      acc.insert(std::make_pair(nb[i],p));
+      if (not trial.second) // failed to create a new entry
+      trial.first->second += p;
+      } // |for (i)| in |nb|
       } // |if(pol!=0)|
-    } // |for (x<=z)|
+      } // |for (x<=z)|
 
 
-    f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
+      f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
       << "KL polynomials (-1)^{l(" << z << ")-l(x)}*P_{x," << z << "}:\n";
-    int width = ioutils::digits(z,10ul);
-    for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
-    {
+      int width = ioutils::digits(z,10ul);
+      for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
+      {
       BlockElt x = it->first;
       const Poly& pol = it->second;
       if (not pol.isZero())
       {
-    	f << std::setw(width) << x << ": ";
-    	prettyprint::printPol(f,pol,"q") << std::endl;
+      f << std::setw(width) << x << ": ";
+      prettyprint::printPol(f,pol,"q") << std::endl;
       }
-    }
+      }
     */
   }
   catch (error::MemoryOverflow& e)
@@ -1637,7 +1735,7 @@ void hblock_f()
     std::cerr << std::endl << "unidentified error occurred" << std::endl;
 
   }
- 
+
 } // |hblock_f|
 
 
@@ -1703,200 +1801,208 @@ void srtest_h()
   io::printFile(std::cerr,"srtest.help",io::MESSAGE_DIR);
 }
 
-void hkllist_f() {
-	RealReductiveGroup& GR = realmode::currentRealGroup();
-	RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
-	ioutils::OutputFile file;
-	std::ostream& strm = file;
+void hkllist_f()
+{
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+  ioutils::OutputFile file;
+  std::ostream& strm = file;
 
-	std::cerr << "Building KGB/Dual KGB ... ";
-	KGB kgb(GR);
-	KGB dual_kgb(dual_GR);
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Building KGB/Dual KGB ... ";
+  const KGB& kgb = GR.kgb();
+  const KGB& dual_kgb = dual_GR.kgb();
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Building hblock ... ";
-	blocks::hBlock block = hBlock(kgb, dual_kgb);
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Building hblock ... ";
+  blocks::hBlock block = hBlock(kgb, dual_kgb);
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Computing twisted KL polynomials ... ";
-	kl::hKLContext* hklc = new kl::hKLContext(block);
-	hklc->fill();
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Computing twisted KL polynomials ... ";
+  kl::hKLContext* hklc = new kl::hKLContext(block);
+  hklc->fill();
+  std::cerr << "Done." << std::endl;
 
-	// sort the polynomials before printing
-	const kl::hKLStore& plist = hklc->getPolyList();
-	std::vector<kl::hKLPol> splist;
-	size_t psize = plist.size();
-	for (kl::KLIndex i=1; i<psize; i++) {
-		splist.push_back(plist[i]);
-	}
-	strm << "Printing " << psize-1 << " twisted KL polynomials:" << std::endl;
+  // sort the polynomials before printing
+  const kl::hKLStore& plist = hklc->getPolyList();
+  std::vector<kl::hKLPol> splist;
+  size_t psize = plist.size();
+  for (kl::KLIndex i=1; i<psize; i++) {
+    splist.push_back(plist[i]);
+  }
+  strm << "Printing " << psize-1 << " twisted KL polynomials:" << std::endl;
 
-	// sort
-	std::sort(splist.begin(),splist.end(),polynomials::compare<kl::hKLCoeff>);
+  // sort
+  std::sort(splist.begin(),splist.end(),polynomials::compare<kl::hKLCoeff>);
 
-	// write the polynomials
-	for (size_t i=0; i<psize-1; i++) {
-		prettyprint::printPol(strm,splist[i],"q");
-		strm << std::endl;
-	}
+  // write the polynomials
+  for (size_t i=0; i<psize-1; i++) {
+    prettyprint::printPol(strm,splist[i],"q");
+    strm << std::endl;
+  }
 }
 
-void hklbasis_f() {
-	RealReductiveGroup& GR = realmode::currentRealGroup();
-	RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
-	ioutils::OutputFile file;
-	std::ostream& strm = file;
+void hklbasis_f()
+{
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+  ioutils::OutputFile file;
+  std::ostream& strm = file;
 
-	std::cerr << "Building KGB/Dual KGB ... ";
-	KGB kgb(GR);
-	KGB dual_kgb(dual_GR);
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Building KGB/Dual KGB ... ";
+  const KGB& kgb = GR.kgb();
+  const KGB& dual_kgb = dual_GR.kgb();
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Building hblock ... ";
-	blocks::hBlock block = hBlock(kgb, dual_kgb);
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Building hblock ... ";
+  blocks::hBlock block = hBlock(kgb, dual_kgb);
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Computing twisted KL polynomials ... ";
-	kl::hKLContext* hklc = new kl::hKLContext(block);
-	hklc->fill();
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Computing twisted KL polynomials ... ";
+  kl::hKLContext* hklc = new kl::hKLContext(block);
+  hklc->fill();
+  std::cerr << "Done." << std::endl;
 
-	// print the full basis
-	size_t hsize = hklc->getSize();
-	int width = ioutils::digits(hsize-1,10ul);
-	strm << "Printing " << hsize << " elements with " << hklc->getPolyList().size()-1 << " distinct polynomials:" << std::endl;
-	for (size_t y=0; y<hsize; y++) {
-	//for (size_t y=hsize; y-->0;) {
-		strm << std::setw(width) << y << ": ";
-		bool first = true;
+  // print the full basis
+  size_t hsize = hklc->getSize();
+  int width = ioutils::digits(hsize-1,10ul);
+  strm << "Printing " << hsize << " elements with " << hklc->getPolyList().size()-1 << " distinct polynomials:" << std::endl;
+  for (size_t y=0; y<hsize; y++) {
+    //for (size_t y=hsize; y-->0;) {
+    strm << std::setw(width) << y << ": ";
+    bool first = true;
 
-		for (size_t x = 0; x <= y; ++x) {
-			const kl::hKLPol& pol = hklc->getPoly(x,y);
-			if (pol.isZero()) continue;
-			if (first) {
-				strm << std::setw(width) << x << ": ";
-				first = false;
-			}
-			else {
-				strm << std::setw(width+2)<< "" << std::setw(width) << x << ": ";
-			}
-			prettyprint::printPol(strm,pol,"q");
-			strm << std::endl;
-		}
+    for (size_t x = 0; x <= y; ++x) {
+      const kl::hKLPol& pol = hklc->getPoly(x,y);
+      if (pol.isZero()) continue;
+      if (first) {
+	strm << std::setw(width) << x << ": ";
+	first = false;
+      }
+      else {
+	strm << std::setw(width+2)<< "" << std::setw(width) << x << ": ";
+      }
+      prettyprint::printPol(strm,pol,"q");
+      strm << std::endl;
+    }
 
-		strm << std::endl;
-	}
+    strm << std::endl;
+  }
 }
-  
-void hkltest_f() {
-	RealReductiveGroup& GR = realmode::currentRealGroup();
-	RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
-	ioutils::OutputFile file;
-	std::ostream& strm = file;
 
-	std::cerr << "Building KGB/Dual KGB ... ";
-	KGB kgb(GR);
-	KGB dual_kgb(dual_GR);
-	std::cerr << "Done." << std::endl;
+void hkltest_f()
+{
+  RealReductiveGroup& GR = realmode::currentRealGroup();
+  RealReductiveGroup& dual_GR = blockmode::currentDualRealGroup();
+  ioutils::OutputFile file;
+  std::ostream& strm = file;
 
-	std::cerr << "Building hblock ... ";
-	blocks::hBlock *hblock = new hBlock(kgb, dual_kgb);
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Building KGB/Dual KGB ... ";
+  const KGB& kgb = GR.kgb();
+  const KGB& dual_kgb = dual_GR.kgb();
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Computing KL polynomials ... ";
-	kl::KLContext* klc=new kl::KLContext(*hblock);
-    klc->fill();
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Building hblock ... ";
+  blocks::hBlock *hblock = new hBlock(kgb, dual_kgb);
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Computing twisted KL polynomials ... ";
-	kl::hKLContext* hklc = new kl::hKLContext(*hblock);
-	hklc->fill();
-	std::cerr << "Done." << std::endl;
+  std::cerr << "Computing KL polynomials ... ";
+  kl::KLContext* klc=new kl::KLContext(*hblock);
+  klc->fill();
+  std::cerr << "Done." << std::endl;
 
-	std::cerr << "Checking polynomials ... ";
-	// compare the two sets of polynomials and 
-	// test for obvious errors
-	size_t count = 0;
-	size_t hbsize = hblock->hsize();
-	for (BlockElt y=0; y<hbsize; y++) {
-		BlockElt by = hblock->hfixed(y);
-		for (BlockElt x=0; x<=y; x++) {
-			BlockElt bx = hblock->hfixed(x);
-			const kl::KLPol& pol = klc->klPol(bx,by);
-			const kl::hKLPol& hpol = hklc->getPoly(x,y);
-			if (pol != hpol) {
-				size_t d1 = pol.degree();
-				size_t d2 = hpol.degree();
-				size_t top = (d1 >= d2) ? d1 : d2;
+  std::cerr << "Computing twisted KL polynomials ... ";
+  kl::hKLContext* hklc = new kl::hKLContext(*hblock);
+  hklc->fill();
+  std::cerr << "Done." << std::endl;
 
-				// check the coefficients
-				for (size_t i=0; i<=top; i++) {
-					kl::hKLCoeff c1 = (i<=d1) ? pol[i] : 0;
-					kl::hKLCoeff c2 = (i<=d2) ? hpol[i] : 0;
-					if (c2 < 0) c2 = -c2;
-					if (c2 > c1) {
+  std::cerr << "Checking polynomials ... ";
+  // compare the two sets of polynomials and
+  // test for obvious errors
+  size_t count = 0;
+  size_t hbsize = hblock->hsize();
+  for (BlockElt y=0; y<hbsize; y++) {
+    BlockElt by = hblock->hfixed(y);
+    for (BlockElt x=0; x<=y; x++) {
+      BlockElt bx = hblock->hfixed(x);
+      const kl::KLPol& pol = klc->klPol(bx,by);
+      const kl::hKLPol& hpol = hklc->getPoly(x,y);
+      if (pol != hpol) {
+	size_t d1 = pol.degree();
+	size_t d2 = hpol.degree();
+	size_t top = (d1 >= d2) ? d1 : d2;
+
+	// check the coefficients
+	for (size_t i=0; i<=top; i++) {
+	  kl::hKLCoeff c1 = (i<=d1) ? pol[i] : 0;
+	  kl::hKLCoeff c2 = (i<=d2) ? hpol[i] : 0;
+	  if (c2 < 0) c2 = -c2;
+	  if (c2 > c1) {
             std::cerr << std::endl;
-						std::cerr << "WARNING: twisted KL coefficient exceeds regular coefficient in absolute value for P_{" << x << "," << y << "}" << std::endl;
-						std::cerr << "Aborting" << std::endl;
-						return;
-					}
-					if ((c1-c2) % 2) {
+	    std::cerr << "WARNING: twisted KL coefficient exceeds regular coefficient in absolute value for P_{" << x << "," << y << "}" << std::endl;
+	    std::cerr << "Aborting" << std::endl;
+	    return;
+	  }
+	  if ((c1-c2) % 2) {
             std::cerr << std::endl;
-						std::cerr << "WARNING: twisted KL coefficient not congruent mod 2 for P_{" << x << "," << y << "}" << std::endl;
-						std::cerr << "Aborting" << std::endl;
-						return;
-					}
-				}
-			}
-		}
+	    std::cerr << "WARNING: twisted KL coefficient not congruent mod 2 for P_{" << x << "," << y << "}" << std::endl;
+	    std::cerr << "Aborting" << std::endl;
+	    return;
+	  }
 	}
-	std::cerr << "Passed!" << std::endl;
+      }
+    }
+  }
+  std::cerr << "Passed!" << std::endl;
 
-	int tab = 2;
-	int width = ioutils::digits(hbsize-1,10ul);
-	strm << "Printing " << hbsize << " elements with " << hklc->getPolyList().size()-1 << " distinct polynomials:" << std::endl;
-	for (BlockElt y=0; y<hbsize; y++) {
-		bool first = true;
-		BlockElt by = hblock->hfixed(y);
-		strm << std::setw(width) << y << ": ";
-		
-		for (BlockElt x=0; x<=y; x++) {
-			BlockElt bx = hblock->hfixed(x);
-			const kl::KLPol& pol = klc->klPol(bx,by);
-			const kl::hKLPol& hpol = hklc->getPoly(x,y);
+  int tab = 2;
+  int width = ioutils::digits(hbsize-1,10ul);
+  strm << "Printing " << hbsize << " elements with " << hklc->getPolyList().size()-1 << " distinct polynomials:" << std::endl;
+  for (BlockElt y=0; y<hbsize; y++) {
+    bool first = true;
+    BlockElt by = hblock->hfixed(y);
+    strm << std::setw(width) << y << ": ";
 
-			if (pol.isZero() && hpol.isZero()) continue;
-			if (first) {
-				strm << std::setw(width) << x << ": ";
-				prettyprint::printPol(strm,pol,"q");
-				if (hpol != pol) {
-					strm << std::endl;
-					strm << std::setw(2*width+2*tab) << "";
-					prettyprint::printPol(strm,hpol,"q");
-				}
-				first = false;
-			}
-			else {
-				strm << std::setw(width+tab) << "" << std::setw(width) << x << ": ";
-				prettyprint::printPol(strm,pol,"q");
-				if (hpol != pol) {
-					strm << std::endl;
-					strm << std::setw(2*width+2*tab) << "";
-					prettyprint::printPol(strm,hpol,"q");
-				}
-			}
-			strm << "" << std::endl;
-			++count;
-		}
+    for (BlockElt x=0; x<=y; x++) {
+      BlockElt bx = hblock->hfixed(x);
+      const kl::KLPol& pol = klc->klPol(bx,by);
+      const kl::hKLPol& hpol = hklc->getPoly(x,y);
 
-		strm << "" << std::endl;
+      if (pol.isZero() && hpol.isZero()) continue;
+      if (first) {
+	strm << std::setw(width) << x << ": ";
+	prettyprint::printPol(strm,pol,"q");
+	if (hpol != pol) {
+	  strm << std::endl;
+	  strm << std::setw(2*width+2*tab) << "";
+	  prettyprint::printPol(strm,hpol,"q");
 	}
+	first = false;
+      }
+      else {
+	strm << std::setw(width+tab) << "" << std::setw(width) << x << ": ";
+	prettyprint::printPol(strm,pol,"q");
+	if (hpol != pol) {
+	  strm << std::endl;
+	  strm << std::setw(2*width+2*tab) << "";
+	  prettyprint::printPol(strm,hpol,"q");
+	}
+      }
+      strm << "" << std::endl;
+      ++count;
+    }
 
-	// free memory
-	delete hblock;
-	delete klc;
-	delete hklc;
+    strm << "" << std::endl;
+  }
+
+  // free memory
+  delete hblock;
+  delete klc;
+  delete hklc;
+}
+
+void nblock_h()
+{
+  io::printFile(std::cerr,"nblock.help",io::MESSAGE_DIR);
 }
 
 } // |namespace|

@@ -65,7 +65,7 @@ namespace {
 
   void fillCoxMatrix(int_Matrix&,
 		     const int_Matrix&,
-		     const permutations::Permutation&);
+		     const Permutation&);
 
   WeylElt::EltPiece dihedralMin(const weyl::Transducer&,
 				      WeylElt::EltPiece,
@@ -146,7 +146,7 @@ WeylGroup::WeylGroup(const int_Matrix& c)
 
   dynkin::DynkinDiagram d(c); // make diagram from Cartan matrix
   // find renumbering |a| putting labels in canonical order
-  permutations::Permutation a= dynkin::normalize(d);
+  Permutation a= dynkin::normalize(d);
 
   /* now put appropriate permutations into |d_in| and |d_out|, so that
      internal number |j| gives external number |d_out[j]|, and of course
@@ -391,16 +391,16 @@ void WeylGroup::conjugacyClass(WeylEltList& c, const WeylElt& w) const
 /*!
   \brief Tells whether sw < w.
 
-  Method: we multiply from $s$ to $sw$, at least on the relevant pieces (those
-  from |min_neighbor(s)| to |s| inclusive); if any decent occurs we return
-  |true|, otherwise |false|. Despite the double loop below, this question is
-  resolved in very few operations on the average.
+  Method: we multiply from $s$ to $sw$, at least by the word pieces of |w| at
+  the relevant pieces: those from |min_neighbor(s)| to |s| inclusive. If any
+  descent occurs we return |true|, otherwise |false|. Despite the double loop
+  below, this question is resolved in relatively few operations on the average.
 */
 bool WeylGroup::hasDescent(Generator s, const WeylElt& w) const
 {
   s=d_in[s]; // inner numbering is used below
 
-  WeylElt x = genIn(s); // becomes (part of) $sw$, unless early |return|
+  WeylElt x = genIn(s); // element operated upon, starts out as |s|
 
   for (size_t j = min_neighbor(s); j <= s; ++j)
   {
@@ -411,6 +411,20 @@ bool WeylGroup::hasDescent(Generator s, const WeylElt& w) const
   }
 
   return false; // since only ascents occur, we have $l(sw)>l(w)$
+}
+
+// same question, but on the right
+bool WeylGroup::hasDescent(const WeylElt& w,Generator s) const
+{
+  s=d_in[s]; // inner numbering is used below
+  unsigned int j = d_rank-1; // current transducer
+
+  // in the next loop |j| cannot pass |0| since transducer 0 only has shifts
+  for (Generator t; (t=d_transducer[j].out(w[j],s))!=UndefGenerator; s=t)
+    --j;
+
+  WeylElt::EltPiece wj=w[j];
+  return d_transducer[j].shift(wj,s)<wj;
 }
 
 
@@ -558,11 +572,17 @@ WeylElt WeylGroup::translation(const WeylElt& w, const WeylInterface& f) const
   return result;
 }
 
-/*!
-  \brief
-  Let |w| act on |v| according to reflection action in root datum |rd|
+/*
+  Let |w| act on |alpha| according to reflection action in root datum |rd|
   Note that rightmost factors act first, as in a product of matrices
 */
+void WeylGroup::act(const RootDatum& rd, const WeylElt& w, RootNbr& alpha) const
+{
+  for (size_t i = d_rank; i-->0; )
+    alpha = rd.permuted_root(wordPiece(w,i),alpha);
+}
+
+// Let |w| act on |v| according to reflection action in root datum |rd|
 void WeylGroup::act(const RootDatum& rd, const WeylElt& w, Weight& v) const
 {
   for (size_t i = d_rank; i-->0; )
@@ -575,6 +595,17 @@ void WeylGroup::act(const RootDatum& rd, const WeylElt& w, Weight& v) const
 
 void WeylGroup::act(const RootDatum& rd, const WeylElt& w, RatWeight& v) const
 { act(rd,w,v.numerator()); }
+
+void WeylGroup::act(const RootDatum& rd, const WeylElt& w, LatticeMatrix& M)
+  const
+{
+  for (size_t i = d_rank; i-->0; )
+  {
+    const WeylWord& xw = wordPiece(w,i);
+    for (size_t j = xw.size(); j-->0; )
+      rd.simple_reflect(d_out[xw[j]],M);
+  }
+}
 
 
 void WeylGroup::act(const PreRootDatum& prd, const WeylElt& w, Weight& v) const
@@ -590,6 +621,17 @@ void WeylGroup::act(const PreRootDatum& prd, const WeylElt& w, Weight& v) const
 void WeylGroup::act(const PreRootDatum& prd, const WeylElt& w, RatWeight& v)
   const
 { act(prd,w,v.numerator()); }
+
+void WeylGroup::act(const PreRootDatum& prd, const WeylElt& w, LatticeMatrix& M)
+  const
+{
+  for (size_t i = d_rank; i-->0; )
+  {
+    const WeylWord& xw = wordPiece(w,i);
+    for (size_t j = xw.size(); j-->0; )
+      prd.simple_reflect(d_out[xw[j]],M);
+  }
+}
 
 /*!
   \brief
@@ -755,9 +797,9 @@ bool TwistedWeylGroup::hasTwistedCommutation
   Although not immediately obvious, all such reduced expressions do have the
   same length.
 
-  The code below choses the first possible generator (for the internal
+  The code below chooses the first possible generator (for the internal
   numbering, as returned by |leftDescent|) at each step, so the reduced
-  expression found is lexicographically first for the internal renumbering
+  expression found is lexicographically first for the internal renumbering.
 */
 InvolutionWord TwistedWeylGroup::involution_expr(TwistedInvolution tw) const
 {
@@ -776,6 +818,35 @@ InvolutionWord TwistedWeylGroup::involution_expr(TwistedInvolution tw) const
       twistedConjugate(tw,s);
     }
 
+  return result;
+}
+
+// This one trades some efficiency for assureance of external least lex repr
+InvolutionWord TwistedWeylGroup::canonical_involution_expr(TwistedInvolution tw)
+  const
+{
+  InvolutionWord result; result.reserve(involutionLength(tw));
+
+  TwistedInvolution delta; // distinguished
+  while (tw!=delta)
+  {
+    Generator s=0;
+    while (not hasDescent(tw,twisted(s)))
+      ++s;
+    // now |s| is the first twisted right equivalently left descent
+
+    if (hasTwistedCommutation(s,tw))
+    {
+      result.push_back(s);
+      leftMult(tw,s);
+    }
+    else
+    {
+      result.push_back(~s);
+      twistedConjugate(tw,s);
+    }
+
+  } // while(tw!=delta)
   return result;
 }
 
@@ -1110,7 +1181,7 @@ WeylElt::EltPiece dihedralShift(const weyl::Transducer& qa,
 */
 void fillCoxMatrix(int_Matrix& cox,
 		   const int_Matrix& cart,
-		   const permutations::Permutation& a)
+		   const Permutation& a)
 {
   assert (cart.numRows()==cart.numColumns());
   int_Matrix(cart.numRows(),cart.numRows()) //create matrix

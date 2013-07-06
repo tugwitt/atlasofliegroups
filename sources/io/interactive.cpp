@@ -456,7 +456,52 @@ void getInteractive(RealFormNbr& rf,
 
 void getInteractive(atlas::Parabolic &psg, size_t rank) throw(error::InputError)
 {
-  psg=get_bounded_int(inputBuf, "enter root subset (in decimal, interpreted binary): ", 1<<rank);
+  // get the user input as a string
+  psg = 0;
+  std::string line;
+  std::cout << "enter simple roots (" << 1 << "-" << rank << "): ";
+  std::getline(std::cin, line);
+
+  // convert it to a stream
+  std::istringstream istream;
+  istream.str(line);
+
+  // parse it
+  while (!istream.eof()) {
+    // read the next non-whitespace character
+    char c;
+    std::streampos pos = istream.tellg();
+    istream >> c;
+
+    if (istream.fail()) {
+      // no more non-whitespace characters
+      return;
+    }
+
+    // see if its a number
+    if (c >= '0' && c <= '9') {
+      // read the number
+      unsigned int n;
+      istream.seekg(pos);
+      istream >> n;
+
+      if (istream.fail()) {
+        // couldn't read the number from the stream
+        // something is really wrong - abort
+        throw error::InputError();
+      }
+
+      // if the number is in range, add it to the subset
+      --n; // change to 0-based convention (makes 0 huge and therefore ignored)
+      if (n < rank)
+        psg |= (1<<n);
+    }
+
+    // see if the user aborted
+    else if (c == '?') {
+      throw error::InputError();
+    }
+  }
 }
 
 
@@ -546,7 +591,7 @@ RealReductiveGroup getRealGroup(complexredgp_io::Interface& CI)
   WeightInvolution inv=getInnerClass(lo,b); // may throw InputError
 
   // commit (unless |RootDatum(prd)| should throw: then nothing is changed)
-  pG=new ComplexReductiveGroup(RootDatum(prd),inv);
+  pG=new ComplexReductiveGroup(prd,inv);
   pI=new complexredgp_io::Interface(*pG,lo);
   // the latter constructor also constructs two realform interfaces in *pI
 }
@@ -723,10 +768,11 @@ repr::StandardRepr get_repr(const repr::Rep_context& c)
   return c.sr(x,lambda_rho,nu);
 }
 
-void get_parameter(RealReductiveGroup& GR,
-		   KGBElt& x,
-		   Weight& lambda_rho,
-		   RatWeight& gamma)
+
+SubSystem get_parameter(RealReductiveGroup& GR,
+			KGBElt& x,
+			Weight& lambda_rho,
+			RatWeight& gamma)
 {
   // first step: get initial x in canonical fiber
   size_t cn=get_Cartan_class(GR.Cartan_set());
@@ -754,7 +800,8 @@ void get_parameter(RealReductiveGroup& GR,
   }
   else
   {
-    std::cout << "Choose a KGB element from the following canonical fiber:\n";
+    std::cout << "Choose a KGB element from Cartan " << cn
+	      << ", whose canonical fiber is:\n";
     kgb_io::print(std::cout,kgb,false,&G,&canonical_fiber);
     x = get_int_in_set("KGB number: ",cf);
   }
@@ -797,43 +844,54 @@ void get_parameter(RealReductiveGroup& GR,
 
   RatWeight nu = get_ratweight(sr_input(),"nu: ",rd.rank());
   gamma = nu;
-  (gamma /= 2) += RatWeight(lambda_rho*2+rd.twoRho(),4);
+  (gamma /= 2) += RatWeight(lambda_rho*2+rd.twoRho(),4); // $(\lambda+\nu)/2$
   {
-    RatWeight t = gamma - nu;
+    RatWeight t = gamma - nu; // $(\lambda-\nu)/2$
     gamma += RatWeight(theta*t.numerator(),t.denominator());
-    gamma.normalize();
+    gamma.normalize(); // $\gamma=((1+\theta)\lambda+(1-\theta)\nu)/2$
   }
+
+
+  SubSystem sub = SubSystem::integral(rd,gamma); // fix integral system now
 
   Weight& numer = gamma.numerator(); // we change |gamma| using it
 
-  // although our goal is to make gamma dominant for the integral system only
-  // it does not hurt to make gamma fully dominant, acting on |x|,|lambda| too
+  // make $\gamma$ dominant for the integral system, acting on |x|,|lambda| too
+  // also act by integral coroots vanishing on $\gamma$ if complex descents
   { weyl::Generator s;
+    const RootNbrSet& real = id.real_roots();
+    Weight twoRho_real = rd.twoRho(real);
     do
     {
-     for (s=0; s<rd.semisimpleRank(); ++s)
+      for (s=0; s<sub.rank(); ++s)
       {
-        int v=rd.simpleCoroot(s).dot(numer);
+	RootNbr alpha = sub.parent_nr_simple(s);
+        int v=rd.coroot(alpha).dot(numer);
         if (v<0)
         {
-          rd.simpleReflect(numer,s);
-          rd.simpleReflect(lambda_rho,s); lambda_rho -= rd.simpleRoot(s);
-          x = kgb.cross(s,x);
+          rd.reflect(numer,alpha);
+          rd.reflect(lambda_rho,alpha);
+	  lambda_rho -= rd.root(alpha)*rd.colevel(alpha);
+	  if (real.isMember(alpha))
+	    lambda_rho -= rd.root(alpha)*(twoRho_real.dot(rd.coroot(alpha))/2);
+          x = kgb.cross(sub.reflection(s),x);
           break;
         }
-        else if (v==0 and
-		 kgb.status(x).isComplex(s) and kgb.isDescent(s,x))
+        else if (v==0 and kgb.isComplexDescent(sub.simple(s),
+					       kgb.cross(sub.to_simple(s),x)))
         {
-          rd.simpleReflect(lambda_rho,s); lambda_rho -= rd.simpleRoot(s);
-          x = kgb.cross(s,x);
+          rd.reflect(lambda_rho,alpha);
+	  lambda_rho -= rd.root(alpha)*rd.colevel(alpha);
+          x = kgb.cross(sub.reflection(s),x);
           break;
         }
       }
     }
-    while (s<rd.semisimpleRank()); // wait until inner loop runs to completion
+    while (s<sub.rank()); // wait until inner loop runs to completion
 
-  }
+  } // |gamma| made integrally dominant
 
+  return sub;
 }
 
 

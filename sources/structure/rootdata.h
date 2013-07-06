@@ -85,10 +85,10 @@ class RootSystem
 
   std::vector<root_info> ri; //!< List of information about positive roots
 
-  matrix::Vector<int> two_rho_in_simple_roots;
+  int_Vector two_rho_in_simple_roots;
 
 //!\brief Root permutations induced by reflections in all positive roots.
-  std::vector<permutations::Permutation> root_perm;
+  std::vector<Permutation> root_perm;
 
   // internal access methods
   byte& Cartan_entry(weyl::Generator i, weyl::Generator j)
@@ -99,8 +99,6 @@ class RootSystem
   Byte_vector& coroot(RootNbr i) { return ri[i].dual;}
   const Byte_vector& root(RootNbr i) const { return ri[i].root;}
   const Byte_vector& coroot(RootNbr i) const { return ri[i].dual;}
-  RootNbr rt_abs(RootNbr alpha) const // offset of corresponding positive root
-    { return isPosRoot(alpha) ? alpha-numPosRoots() : numPosRoots()-1-alpha; }
 
   void cons(const int_Matrix& Cartan_matrix); // panse bete
  public:
@@ -135,6 +133,9 @@ class RootSystem
   int_Vector root_expr(RootNbr alpha) const;
   int_Vector coroot_expr(RootNbr alpha) const;
 
+  int level(RootNbr alpha) const; // equals |root(alpha).dot(dual_twoRho())|
+  int colevel(RootNbr alpha) const; // equals |coroot(alpha).(twoRho())|
+
   // convert sequence of root numbers to expressions in the simple roots
   template <typename I, typename O>
     void toRootBasis(I, I, O) const;
@@ -166,6 +167,9 @@ class RootSystem
   RootNbr rootMinus(RootNbr alpha) const // roots are ordered symmetrically
   { return numRoots()-1-alpha; }
 
+  RootNbr rt_abs(RootNbr alpha) const // offset of corresponding positive root
+  { return isPosRoot(alpha) ? alpha-numPosRoots() : numPosRoots()-1-alpha; }
+
 
   RootNbrSet simpleRootSet() const; // NOT for iteration over it; never used
   RootNbrList simpleRootList() const; // NOT for iteration over it
@@ -173,9 +177,9 @@ class RootSystem
 
 // other accessors
 
-  // the next method only works for _simple_ roots! (whence no RootNbr for |i|)
-  const permutations::Permutation& simple_root_permutation(weyl::Generator i)
-    const
+  // The next method requires a positive root index |i|. It is however used
+  // mostly with simple roots, whence the name. See |root_permutation| below.
+  const Permutation& simple_root_permutation(weyl::Generator i) const
   { return root_perm[i]; }
 
   RankFlags descent_set(RootNbr alpha) const
@@ -219,7 +223,7 @@ class RootSystem
   }
 
   // for arbitrary roots, reduce root number to positive root offset first
-  const permutations::Permutation& root_permutation(RootNbr alpha) const
+  const Permutation& root_permutation(RootNbr alpha) const
   { return root_perm[rt_abs(alpha)]; }
 
   bool isOrthogonal(RootNbr alpha, RootNbr beta) const
@@ -230,11 +234,11 @@ class RootSystem
 
 
 
-  // find permutation of roots induced by diagram automorphism
-  permutations::Permutation root_permutation(const permutations::Permutation& ) const;
+  // find (simple preserving) roots permutation induced by diagram automorphism
+  Permutation root_permutation(const Permutation& twist) const;
 
   // extend root datum automorphism given on simple roots to all roots
-  permutations::Permutation extend_to_roots(const RootNbrList&) const;
+  Permutation extend_to_roots(const RootNbrList& simple_images) const;
 
 
   WeylWord reflectionWord(RootNbr r) const;
@@ -472,12 +476,16 @@ use by accessors.
   int cartan(weyl::Generator i, weyl::Generator j) const
     { return simpleRoot(i).dot(simpleCoroot(j)); }
 
-  //!\brief  Applies to v the reflection about root alpha.
+  //!\brief  Applies to |lambda| the reflection about root |alpha|.
   void reflect(Weight& lambda, RootNbr alpha) const
     { lambda -= root(alpha)*lambda.dot(coroot(alpha)); }
   //!\brief  Applies reflection about coroot |alpha| to a coweight
   void coreflect(Coweight& co_lambda, RootNbr alpha) const
     { co_lambda -= coroot(alpha)*co_lambda.dot(root(alpha)); }
+
+  // on matrices we have left and right multiplication by reflection matrices
+  void reflect(RootNbr alpha, LatticeMatrix& M) const;
+  void reflect(LatticeMatrix& M,RootNbr alpha) const;
 
   Weight reflection(Weight lambda, RootNbr alpha) const
     { reflect(lambda,alpha); return lambda; }
@@ -488,6 +496,12 @@ use by accessors.
     { reflect(v,simpleRootNbr(i)); }
   void simpleCoreflect(Coweight& v, weyl::Generator i) const
     { coreflect(v,simpleRootNbr(i)); }
+
+  void simple_reflect(weyl::Generator i, LatticeMatrix& M) const
+  { reflect(simpleRootNbr(i),M); }
+  void simple_reflect(LatticeMatrix& M,weyl::Generator i) const
+  { reflect(M,simpleRootNbr(i)); }
+
 
   Weight simpleReflection(Weight lambda, weyl::Generator i) const
     { simpleReflect(lambda,i); return lambda; }
@@ -504,8 +518,7 @@ use by accessors.
     { act(ww,lambda); return lambda; }
 
   // here any matrix permuting the roots is allowed, e.g., root_reflection(r)
-  permutations::Permutation rootPermutation(const WeightInvolution& q) const;
-  // extend diagram automorphism to permutation of all roots
+  Permutation rootPermutation(const WeightInvolution& q) const;
 
   WeightInvolution root_reflection(RootNbr r) const;
   WeightInvolution simple_reflection(weyl::Generator i) const

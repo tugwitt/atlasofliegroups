@@ -66,80 +66,6 @@ std::vector<Grading> compute_square_classes
 
 *****************************************************************************/
 
-//              |TorusElement|
-
-
-// For torus elements we keep numerator entries reduced modulo |2*d_denom|.
-// Note this invariant is not enforced in the (private) raw constructor.
-
-// make $\exp(2\pi i r)$, doing affectively *2, then reducing modulo $2X_*$
-  TorusElement::TorusElement(const RatWeight& r, bool two)
-  : repr(r) // but multiplied by 2 below
-{ if (two)
-    repr*=2;
-  unsigned int d=2u*repr.denominator(); // we reduce modulo $2\Z^rank$
-  Weight& num=repr.numerator();
-  for (size_t i=0; i<num.size(); ++i)
-    num[i] = arithmetic::remainder(num[i],d);
-}
-
-RatWeight TorusElement::log_pi(bool normalize) const
-{
-  if (normalize)
-    return RatWeight(repr).normalize();
-  return repr;
-}
-
-RatWeight TorusElement::log_2pi() const
-{
-  Weight numer = repr.numerator(); // copy
-  unsigned int d = 2u*repr.denominator(); // this will make result mod Z, not 2Z
-  return RatWeight(numer,d).normalize();
-}
-
-Rational TorusElement::evaluate_at
-  (const Coweight& alpha) const
-{
-  unsigned int d = repr.denominator();
-  int n = arithmetic::remainder(repr.numerator().dot(alpha),d+d);
-  return Rational(n,d);
-}
-
-TorusElement TorusElement::operator +(const TorusElement& t) const
-{
-  TorusElement result(repr + t.repr,tags::UnnormalizedTag()); // raw ctor
-  int d=2*result.repr.denominator(); // we shall reduce modulo $2\Z^rank$
-  Weight& num=result.repr.numerator();
-  for (size_t i=0; i<num.size(); ++i)
-    if (num[i] >= d) // correct if |result.repr| in interval $[2,4)$
-      num[i] -=d;
-  return result;
-}
-
-TorusElement TorusElement::operator -(const TorusElement& t) const
-{
-  TorusElement result(repr - t.repr,0); // raw constructor
-  int d=2*result.repr.denominator(); // we shall reduce modulo $2\Z^rank$
-  Weight& num=result.repr.numerator();
-  for (size_t i=0; i<num.size(); ++i)
-    if (num[i]<0) // correct if |result.repr| in interval $(-2,0)$
-      num[i] +=d;
-  return result;
-}
-
-TorusElement& TorusElement::operator+=(TorusPart v)
-{
-  for (size_t i=0; i<v.size(); ++i)
-    if (v[i])
-    {
-      if (repr.numerator()[i]<repr.denominator())
-	repr.numerator()[i]+=repr.denominator(); // add 1/2 to coordinate
-      else
-	repr.numerator()[i]-=repr.denominator(); // subtract 1/2
-    }
-  return *this;
-}
-
 
 
 //              |GlobalTitsElement|
@@ -220,20 +146,15 @@ WeightInvolution
 {
   WeightInvolution M = delta_tr;
   M.negate(); // we need the involution |-^delta| corresponding to |delta|
-  for (size_t j=0; j<M.numColumns(); ++j) // apply reflections to each column
-  {
-    matrix::Vector<int> c=M.column(j);
-    weylGroup().act(simple,tw,c); // twisted involution, so left action is OK
-    M.set_column(j,c);
-  }
+  weylGroup().act(simple,tw,M); // twisted involution, so left action is OK
   return M;
 }
 
 TorusElement GlobalTitsGroup::twisted(const TorusElement& x) const
 {
   RatWeight rw = x.log_pi(false);
-  return exp_pi(RatWeight(delta_tr*rw.numerator(),
-					rw.denominator()));
+  return y_values::exp_pi(RatWeight(delta_tr*rw.numerator(),
+				    rw.denominator()));
 }
 
 TorusElement GlobalTitsGroup::theta_tr_times_torus(const GlobalTitsElement& a)
@@ -241,7 +162,7 @@ TorusElement GlobalTitsGroup::theta_tr_times_torus(const GlobalTitsElement& a)
 { RatWeight rw = a.torus_part().log_pi(false);
   matrix::Vector<int> num = delta_tr*rw.numerator();
   weylGroup().act(simple,a.tw(),num);
-  return exp_pi(RatWeight(num,rw.denominator()));
+  return y_values::exp_pi(RatWeight(num,rw.denominator()));
 }
 
 // this is currently only used by |has_central_square| (with |do_twist==true|)
@@ -324,6 +245,17 @@ RankFlags GlobalTitsGroup::descents(const GlobalTitsElement& a) const
   return result;
 }
 
+
+void
+GlobalTitsGroup::imaginary_cross_act(weyl::Generator s,TorusElement& t) const
+{
+  Rational r =
+    t.evaluate_at(simple.coroots()[s]) - Rational(1); // $\rho_{im}$ shift
+  if (r.numerator()!=0) // compact imaginary case needs no action
+    add(RatWeight // now reflect for |s|, shifted to fix $\rho_{im}$
+	(simple.roots()[s]*-r.numerator(),2*r.denominator()),t);
+}
+
 /* The code below uses Tits element representation as $t*\sigma_w*\delta_1$
    and $\delta_1*\sigma_\alpha^{-1} = \sigma_\beta*\delta_1$, simple $\alpha$
    so conjugation by $\sigma_\alpha$ gives $\sigma_\alpha*(t,w)*\sigma_\beta$
@@ -334,18 +266,12 @@ GlobalTitsGroup::cross_act(weyl::Generator s, GlobalTitsElement& x) const
   int d=twistedConjugate(x.w,s); // Tits group must add $m_\alpha$ iff $d=0$
   if (d!=0) // complex cross action: reflect torus part by |s|
   {
-    x.t.simple_reflect(simple,s); // OK since |simple| on dual side for |x.t|
+    complex_cross_act(s,x.t);
     return d/2; // report half of length change in Weyl group
   }
 
   if (not hasDescent(s,x.w)) // imaginary cross action
-  {
-    Rational r =
-      x.t.evaluate_at(simple.coroots()[s]) - Rational(1);
-    if (r.numerator()!=0) // compact imaginary case needs no action
-      add(RatWeight // now reflect for |s| about compact case
-	  (simple.roots()[s]*-r.numerator(),2*r.denominator()),x);
-  }
+    imaginary_cross_act(s,x.t);
   return 0; // no length change this case
 }
 
@@ -367,51 +293,47 @@ int GlobalTitsGroup::cross_act(GlobalTitsElement& a,const  WeylWord& w)
   return d; // total length change, in case the caller is interested
 }
 
-// multiply strong involution by |rw|; side should be immaterial (left used)
-void GlobalTitsGroup::add
-  (const RatWeight& rw,GlobalTitsElement& a)
-  const
-{ // the following would be necessary to get a true right-mulitplication
-  // involution_matrix(a.tw()).apply_to(rw.numerator()); // pull |rw| across
-  tits::TorusElement& tp = a.t;
-  tp = tp + exp_2pi(rw);
-}
-
 /*
-  When trying to invert a Cayley transform, apart from modifying the
-  involution, we must change the torus element so that its evaluation on
-  $\alpha$ becomes integer (half-integer means we have a potentially valid
-  Tits element, but the requirement that the simple root |alpha| become a
-  noncompact root means the value should in fact be integer). We may modify by
-  a rational multiple of $\alpha^\vee$, since being $-\theta$-fixed after the
-  Cayley transform such a coweight has zero evalution on $\theta$-fixed
-  weights (so the evaluation on imaginary roots stays half-integral), and
-  modulo coweights that are $-\theta$-fixed before the Cayley transform (which
-  do not affect $\alpha$, and which we continue to not care about) multiples
-  of $\alpha^\vee$ are the only freedom we have to modify the evaluation at
-  $\alpha$. If not already integral, we simply make the evaluation at $\alpha$
-  zero, which is as good as any integer. Note that in the reduction modulo 2
-  that will be used in |TitsGroup| below, this kind of correction is no longer
-  possible, and we must perform a more tedious search for a valid correction.
+  When trying to invert a Cayley transform, we may need to change the torus
+  element so that its evaluation on $\alpha$ becomes integer (half-integer
+  means we have a potentially valid Tits element, but the requirement that the
+  simple root |alpha| become a noncompact root means the value should in fact
+  be integer). We may modify by a rational multiple of $\alpha^\vee$, since
+  being $-\theta$-fixed after the Cayley transform such a coweight has zero
+  evalution on $\theta$-fixed weights (so the evaluation on imaginary roots
+  stays half-integral), and modulo coweights that are $-\theta$-fixed before
+  the Cayley transform (which do not affect $\alpha$, and which we continue to
+  not care about) multiples of $\alpha^\vee$ are the only freedom we have to
+  modify the evaluation at $\alpha$. If not already integral, we simply make
+  the evaluation at $\alpha$ zero, which is as good as any integer. Note that
+  in the reduction modulo 2 that will be used in |TitsGroup| below, this kind
+  of correction is no longer possible, and we must perform a more tedious
+  search for a valid correction.
 
   This is Lemma 14.6 in the Algorithms paper.
  */
-void GlobalTitsGroup::do_inverse_Cayley(weyl::Generator s,GlobalTitsElement& a)
-  const
+void
+GlobalTitsGroup::do_inverse_Cayley(weyl::Generator s,TorusElement& t) const
 {
   const Coweight& eval_pt=simple.coroots()[s];
-  RatWeight t=a.t.log_2pi();
-  int num = eval_pt.dot(t.numerator()); // should become multiple of denominator
+  RatWeight w=t.log_2pi();
+  int num = eval_pt.dot(w.numerator()); // should become multiple of denominator
 
-  if (num% (int)(t.denominator())!=0) // correction needed if alpha compact
+  if (num % w.denominator()!=0) // correction needed if alpha compact
   {
     const Weight& shift_vec= simple.roots()[s];
     // |eval_pt.dot(shift_vec)==2|, so correct numerator by |(num/2d)*shift_vec|
-    t -= RatWeight(shift_vec*num,2*t.denominator());
-    assert(eval_pt.dot(t.numerator())==0);
+    w -= RatWeight(shift_vec*num,2*w.denominator());
+    assert(eval_pt.dot(w.numerator())==0);
+    t=y_values::exp_2pi(w);
   }
+}
 
-  leftMult(a.w,s); a.t=exp_2pi(t);
+void GlobalTitsGroup::do_inverse_Cayley(weyl::Generator s,GlobalTitsElement& a)
+  const
+{
+  do_inverse_Cayley(s,a.t);
+  leftMult(a.w,s);
 }
 
 // Sometimes we need to compute the grading at non-simple imaginary roots.
@@ -524,7 +446,7 @@ SubTitsGroup::SubTitsGroup(const ComplexReductiveGroup& G,
   GlobalTitsElement a(G.rank()); // identity
   for (weyl::Generator s=0; s<sub.rank(); ++s)
     if (parent.compact(sub.parent_datum(),sub.parent_nr_simple(s),a))
-      t = t + exp_2pi(rd.fundamental_weight(s));
+      t = t + y_values::exp_2pi(rd.fundamental_weight(s));
 }
 
 TorusElement SubTitsGroup::base_point_offset(const TwistedInvolution& tw)
@@ -933,24 +855,24 @@ bool TitsCoset::is_valid(TitsElt a) const
    square class of the real form. The bitvector |v| below is zero for some
    strong involution |si| in same square class as |rf| at Cartan class |cn|;
    the result will be correct if and only if the null torus part |x| defines
-   (by |TitsCoset::grading|) the same grading of the (simple) imaginary
-   roots for Cartan class |cn| as |si| does (through |Fiber::class_base|).
+   (by |TitsCoset::grading|) the same grading of the (simple) imaginary roots
+   for the canonical involution of Cartan class |cn| as |si| does (through
+   |Fiber::class_base|).
 
    The only case where one can rely on that to be true is for the fundamental
    Cartan (|cn==0|), if our |TitsCoset| was extracted as base object from
    an |EnrichedTitsGroup| (the latter being necessarily constructed through
    |EnrichedTitsGroup::for_square_class|), because in that case the
    |TitsCoset::grading_offset| field was actually computed from de
-   grading defined by an element |si| in the fundamental fiber. In the general
+   grading defined by the element |si| in the fundamental fiber. In the general
    case all bets are off: the real form of |si| need not even be the same one
    as the one corresponding to |TitsCoset::grading_offset|.
 
    The main reason for leaving this (unused) method in the code is that it
-   illustrates how to get the group morphism from the fiber group to T(2).
+   illustrates how to apply the group morphism from the fiber group to T(2).
  */
 TitsElt TitsCoset::naive_seed
- (ComplexReductiveGroup& G,
-  RealFormNbr rf, size_t cn) const
+  (ComplexReductiveGroup& G, RealFormNbr rf, size_t cn) const
 {
   // locate fiber, weak and strong real forms, and check central square class
   const Fiber& f=G.cartan(cn).fiber();
@@ -1008,9 +930,8 @@ TitsElt TitsCoset::naive_seed
    guarantee that chosen solutions will belong to the same strong real form.
    Therefore this method should only be called when only one seed is needed.
  */
-TitsElt
-TitsCoset::grading_seed(ComplexReductiveGroup& G,
-			     RealFormNbr rf, size_t cn) const
+TitsElt TitsCoset::grading_seed
+  (ComplexReductiveGroup& G,RealFormNbr rf, size_t cn) const
 {
   // locate fiber and weak real form
   const Fiber& f=G.cartan(cn).fiber();
@@ -1076,11 +997,12 @@ TitsCoset::grading_seed(ComplexReductiveGroup& G,
 #endif
 
   return seed;  // result should be reduced immediatly by caller
-}
+} // |grading seed|
 
-SmallSubspace fiber_denom(const WeightInvolution& inv)
+// torus parts: modulo the mod-2 reduction of the $-\theta$-fixed sublattice
+SmallSubspace fiber_denom(const WeightInvolution& theta)
 {
-  BinaryMap A(lattice::eigen_lattice(inv.transposed(),-1));
+  BinaryMap A(lattice::eigen_lattice(theta.transposed(),-1));
   return SmallSubspace(A);
 }
 
@@ -1152,7 +1074,7 @@ TitsElt EnrichedTitsGroup::backtrack_seed
   TitsElt result(Tg);
 
   const Fiber& fund=G.fundamental();
-  const partition::Partition& srp = fund.strongReal(square());
+  const Partition& srp = fund.strongReal(square());
   for (unsigned long x=0; x<srp.size(); ++x)
     if (srp(x)==srp(f_orbit()))
     {

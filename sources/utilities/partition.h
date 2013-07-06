@@ -20,6 +20,7 @@ acting on elements of order 2 in a torus.
 
 #include "partition_fwd.h"
 
+#include <cstddef>
 #include <functional>
 #include <vector>
 
@@ -28,11 +29,6 @@ acting on elements of order 2 in a torus.
 namespace atlas {
 
 namespace partition {
-
-/******** type declarations **************************************************/
-
-  class Partition;
-  class PartitionIterator;
 
 /******** function declarations **********************************************/
 
@@ -91,6 +87,8 @@ class Partition : public std::unary_function<unsigned long,unsigned long>
    std::unary_function<unsigned long,unsigned long>
   */
   typedef unsigned long result_type;
+
+  typedef PartitionIterator iterator;
 
 // constructors and destructors
   Partition() {}
@@ -176,8 +174,8 @@ class Partition : public std::unary_function<unsigned long,unsigned long>
     for (PartitionIterator it(pi); it(); ++it) { ... }
 
   Within the body of this loop, |*it| gives a pair of iterators into a vector
-  of integers (in fact into |d_data|) such that interating from the first to
-  the last traverses a class for |pi|;
+  of integers (in fact into |d_data|) such that iterating from the first to
+  the second traverses a class for |pi|;
 
     for (PartitionIterator::SubIterator jt=it->first; jt!=it->second; ++jt)
     { ... pi(*jt) is constant during this loop ... }

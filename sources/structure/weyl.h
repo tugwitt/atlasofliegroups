@@ -483,7 +483,7 @@ public:
     for (size_t i=ww.size(); i-->0; ) // use letters from right to left
       leftMult(w,ww[i]);
   }
-  void leftMult(WeylElt& w, const WeylElt& x) const;
+  void leftMult(WeylElt& w, const WeylElt& x) const; // |w=xw|
 
   WeylElt prod(const WeylElt& w, Generator s) const
     { WeylElt result=w; mult(result,s); return result; }
@@ -571,7 +571,8 @@ public:
   /* inverse operation of |toUlong| */
   WeylElt toWeylElt(unsigned long) const;
 
-  bool hasDescent(Generator, const WeylElt&) const;
+  bool hasDescent(Generator, const WeylElt&) const; // on the left
+  bool hasDescent(const WeylElt&, Generator) const; // on the right
 
   // apply automorphism of $(W,S)$ given by |f| in terms of outer numbering
   WeylElt translation(const WeylElt& w, const WeylInterface& f) const;
@@ -579,14 +580,19 @@ public:
   void translate(WeylElt& w, const WeylInterface& i) const
     { w=translation(w,i); }
 
+  // reflection action of Weyl group on a root
+  void act(const RootDatum& rd, const WeylElt& w, RootNbr& alpha) const;
   // standard reflection action of Weyl group using a root datum
   void act(const RootDatum& rd, const WeylElt& w, Weight& v) const;
   // standard reflection action of Weyl group using a root datum
   void act(const RootDatum& rd, const WeylElt& w, RatWeight& v) const;
+  // standard reflection action of Weyl group using a root datum
+  void act(const RootDatum& rd, const WeylElt& w, LatticeMatrix& M) const;
 
   // same using only lists of simple (co)roots avoiding construction root datum
   void act(const PreRootDatum& prd, const WeylElt& w, Weight& v) const;
   void act(const PreRootDatum& prd, const WeylElt& w, RatWeight& v) const;
+  void act(const PreRootDatum& prd, const WeylElt& w, LatticeMatrix& M) const;
  /*!
   \brief Nondestructive version of |act| method
 */
@@ -662,6 +668,8 @@ public:
 
   bool hasDescent(Generator s, const WeylElt& w) const
     { return W.hasDescent(s,w); }
+  bool hasDescent(const WeylElt& w, Generator s) const
+    { return W.hasDescent(w,s); }
 
   Generator twisted(Generator s) const { return d_twist[s]; }
   WeylElt twisted(const WeylElt& w) const { return W.translation(w,d_twist); }
@@ -715,10 +723,11 @@ public:
 */
   unsigned long involutionLength(const TwistedInvolution& tw) const;
 
-/*!
+ /*!
   \brief Returns a reduced expression of |tw| as a twisted involution.
 */
-  InvolutionWord involution_expr(TwistedInvolution tw) const; // call by value
+   InvolutionWord involution_expr(TwistedInvolution tw) const; // call by value
+   InvolutionWord canonical_involution_expr(TwistedInvolution tw) const; // idem
 
   //!\brief Roots that are images of the simple roots under involution of |tw|
   RootNbrList simple_images

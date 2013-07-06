@@ -73,9 +73,7 @@ struct Layout;
   */
   const char* const innerClassLetters = "Ccesu";
 
-}
 
-namespace lietype {
 
 typedef char TypeLetter;
 
@@ -124,7 +122,7 @@ struct Layout
 {
   LieType d_type;
   InnerClassType d_inner;
-  permutations::Permutation d_perm; // of diagram wrt usual order in |d_type|
+  Permutation d_perm; // of diagram wrt usual order in |d_type|
 
 // constructors and destructors
 
@@ -142,12 +140,9 @@ Layout() : d_type(), d_inner(), d_perm() {} // needed in realex
 
 }; // |struct Layout|
 
-} // |namespace lietype|
 
 
 /******** function declarations **********************************************/
-
-namespace lietype {
 
   bool checkRank(const TypeLetter&, size_t);
 

@@ -29,6 +29,7 @@
   This is rootdata.cpp.
 
   Copyright (C) 2004,2005 Fokko du Cloux
+  Copyright (C) 2006--2011 Marc van Leeuwen
   part of the Atlas of Reductive Lie Groups
 
   For license information see the LICENSE file
@@ -79,12 +80,6 @@
   corresponds to a sublattice of finite index in the character
   lattice, containing the root lattice. From this sublattice the
   actual root datum is constructed.
-
-  [DV: An earlier version of this class included the inner class of
-  real groups, which is to say an involutive automorphism of the based
-  root datum.  As an artifact of that, the user interaction acquires
-  the involutive automorphism before the subgroup of Z_tor, and
-  insists that the subgroup of Z_tor be preserved by this involution.]
 
 ******************************************************************************/
 
@@ -141,9 +136,11 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
 {
   std::vector<Byte_vector> simple_root(rk,Byte_vector(rk));
   std::vector<Byte_vector> simple_coroot(rk,Byte_vector(rk));
-  std::vector<RootNbrList> link;
-  std::vector<std::set<Byte_vector,root_compare> >
-    roots_of_length(4*rk); // more than enough if |rk>0|; $E_8$ needs size 31
+  std::vector<RootNbrList> link; // size |numPosRoots*rank|
+
+  typedef std::set<Byte_vector,root_compare> RootVecSet;
+  std::vector<RootVecSet> roots_of_length
+    (4*rk); // more than enough if |rk>0|; $E_8$ needs size 31
 
   for (size_t i=0; i<rk; ++i)
   {
@@ -157,12 +154,12 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
 
   // construct positive root list, simple reflection links, and descent sets
 
-  RootNbrList first_l(1,0);
+  RootNbrList first_l(1,0); // where level |l| starts; level 0 is empty
   for (size_t l=1; not roots_of_length[l].empty(); ++l)// empty level means end
   {
     first_l.push_back(ri.size()); // set |first_l[l]| to next root to be added
-    //for (std::set<Byte_vector>::iterator it=roots_of_length[l].begin(); it!=roots_of_length[l].end(); ++it)
-    for (std::set<Byte_vector, root_compare>::iterator it=roots_of_length[l].begin(); it!=roots_of_length[l].end(); ++it)
+    for (RootVecSet::iterator
+	   it=roots_of_length[l].begin(); it!=roots_of_length[l].end(); ++it)
     {
       const Byte_vector& alpha = *it;
       for (size_t i=0; i<rk; ++i)
@@ -170,7 +167,7 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
 
       const RootNbr cur = ri.size();
       ri.push_back(root_info(alpha)); // add new positive root to the list
-      link.push_back(RootNbrList(rk,~0u)); // initially all links are undefined
+      link.push_back(RootNbrList(rk,RootNbr(~0))); // all links start undefined
 
       byte c;
       for (size_t i=0; i<rk; ++i)
@@ -224,11 +221,11 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
     coroot(alpha)[i]-=coroot(beta).dot(simple_root[i]); // and modify
   }
 
-  root_perm.resize(npos,permutations::Permutation(2*npos));
+  root_perm.resize(npos,Permutation(2*npos));
   // first fill in the simple root permutations
   for (size_t i=0; i<rk; ++i)
   {
-    permutations::Permutation& perm=root_perm[i];
+    Permutation& perm=root_perm[i];
     for (RootNbr alpha=0; alpha<npos; ++alpha)
       if (alpha==i) // simple root reflecting itself makes it negative
       {
@@ -248,13 +245,13 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
   {
     size_t i=ri[alpha].descents.firstBit();
     assert(i<rk);
-    permutations::Permutation& alpha_perm=root_perm[alpha];
+    Permutation& alpha_perm=root_perm[alpha];
     alpha_perm=root_perm[i];
     root_perm[link[alpha][i]].left_mult(alpha_perm);
     root_perm[i].left_mult(alpha_perm);
   }
 
-}
+} // end of basic constructor
 
 RootSystem::RootSystem(const RootSystem& rs, tags::DualTag)
   : rk(rs.rk)
@@ -280,7 +277,8 @@ RootSystem::RootSystem(const RootSystem& rs, tags::DualTag)
 	two_rho_in_simple_roots[i]+=a[i]; // sum positive root expressions
     }
   }
-}
+} // end of dual constructor
+
 
 int_Vector RootSystem::root_expr(RootNbr alpha) const
 {
@@ -294,10 +292,33 @@ int_Vector RootSystem::root_expr(RootNbr alpha) const
 int_Vector RootSystem::coroot_expr(RootNbr alpha) const
 {
   RootNbr a=rt_abs(alpha);
-  int_Vector expr(ri[a].dual.begin(),ri[a].dual.end());
+  int_Vector expr(coroot(a).begin(),coroot(a).end());
   if (not isPosRoot(alpha))
     expr *= -1;
   return expr;
+}
+
+int RootSystem::level(RootNbr alpha) const
+{
+  RootNbr a=rt_abs(alpha);
+  int result=0;
+  for (Byte_vector::const_iterator it=root(a).begin(); it!=root(a).end(); ++it)
+    result += *it;
+  if (not isPosRoot(alpha))
+    result *= -1;
+  return result;
+}
+
+int RootSystem::colevel(RootNbr alpha) const
+{
+  RootNbr a=rt_abs(alpha);
+  int result=0;
+  for (Byte_vector::const_iterator
+	 it=coroot(a).begin(); it!=coroot(a).end(); ++it)
+    result += *it;
+  if (not isPosRoot(alpha))
+    result *= -1;
+  return result;
 }
 
 /*!
@@ -438,11 +459,11 @@ RootSystem::bracket(RootNbr alpha, RootNbr beta) const // $\<\alpha,\beta^\vee>$
   return isPosRoot(alpha)!=isPosRoot(beta) ? -c : c;
 }
 
-permutations::Permutation
+Permutation
 RootSystem::extend_to_roots(const RootNbrList& simple_image) const
 {
   assert(simple_image.size()==rk);
-  permutations::Permutation result(numRoots());
+  Permutation result(numRoots());
 
   RootNbrList image_reflection(rk);
 
@@ -457,7 +478,7 @@ RootSystem::extend_to_roots(const RootNbrList& simple_image) const
   // extend to positive roots
   for (size_t alpha=numPosRoots()+rk; alpha<numRoots(); ++alpha)
   {
-    size_t i = ri[alpha-numPosRoots()].descents.firstBit();
+    unsigned int i = ri[alpha-numPosRoots()].descents.firstBit();
     assert(i<rk);
     RootNbr beta = simple_reflected_root(alpha,i);
     assert(isPosRoot(beta) and beta<alpha);
@@ -471,8 +492,8 @@ RootSystem::extend_to_roots(const RootNbrList& simple_image) const
   return result;
 }
 
-permutations::Permutation
-RootSystem::root_permutation(const permutations::Permutation& twist) const
+Permutation
+RootSystem::root_permutation(const Permutation& twist) const
 {
   assert(twist.size()==rk);
   RootNbrList simple_image(rk);
@@ -514,34 +535,35 @@ matrix::Vector<int> RootSystem::pos_system_vec(const RootNbrList& Delta) const
 
 RootNbrList RootSystem::simpleBasis(RootNbrSet rs) const
 {
-  rs.clear(0,numPosRoots()); // clear negative roots
+  rs.clear(0,numPosRoots()); // clear any negative roots, not considered here
   RootNbrSet candidates = rs; // make a copy that will be pruned
 
   for (RootNbrSet::iterator it=candidates.begin(); it(); ++it)
   {
     RootNbr alpha=*it;
-    for (RootNbrSet::iterator jt=rs.begin(); jt(); ++jt) // full positive subsystem
+    for (RootNbrSet::iterator
+	   jt=rs.begin(); jt(); ++jt) // run through unpruned subsystem
     {
       RootNbr beta=*jt;
       if (alpha==beta) continue; // avoid reflecting root itself
       RootNbr gamma = root_perm[alpha-numPosRoots()][beta];
       if (gamma<beta) // positive dot product
       {
-	if (isPosRoot(gamma))
-	  candidates.remove(beta); // simple root cannot be made less positive
+	if (isPosRoot(gamma)) // beta can be made less positive, so it cannot
+	  candidates.remove(beta); // be simple; remove it if it was candidate
 	else
-	{
-	  candidates.remove(alpha); // simple root cannot make other negative
-	  break;
+	{ // reflection in alpha makes some other root (beta) negative, so
+	  candidates.remove(alpha); // alpha is not simple; remove it
+	  break; // and move on to the next candadate
 	}
       }
-    }
+    } // |for (beta)|
     if (not candidates.isMember(alpha)) // so we just removed it, |break| again
       break;
-  }
-  // now every member of |candidates| permutes the other members of |rs|
+  } // |for (alpha)|
+  // now every reflection among |candidates| permutes the other members of |rs|
 
-  return RootNbrList(candidates.begin(), candidates.end()); // converts to vector
+  return RootNbrList(candidates.begin(), candidates.end()); // convert to vector
 }
 
 bool RootSystem::sumIsRoot(RootNbr alpha, RootNbr beta, RootNbr& gamma) const
@@ -754,23 +776,46 @@ RatWeight RootDatum::fundamental_coweight(weyl::Generator i) const
 
 /******** accessors **********************************************************/
 
+void RootDatum::reflect(RootNbr alpha, LatticeMatrix& M) const
+{
+  assert(M.numRows()==rank());
+  for (unsigned int j=0; j<M.numColumns(); ++j)
+  {
+    int s=0;
+    for (unsigned int i=0; i<rank(); ++i)
+      s+= coroot(alpha)[i]*M(i,j);
+    for (unsigned int i=0; i<rank(); ++i)
+      M(i,j) -= root(alpha)[i]*s;
+  }
+}
+
+void RootDatum::reflect(LatticeMatrix& M,RootNbr alpha) const
+{
+  assert(M.numColumns()==rank());
+  for (unsigned int i=0; i<M.numRows(); ++i)
+  {
+    int s=0;
+    for (unsigned int j=0; j<rank(); ++j)
+      s+= M(i,j)*root(alpha)[j];
+    for (unsigned int j=0; j<rank(); ++j)
+      M(i,j) -= s*coroot(alpha)[j];
+  }
+}
+
+
 /*!
 \brief Returns the permutation of the roots induced by |q|.
 
   Precondition: |q| permutes the roots;
 */
-permutations::Permutation
-  RootDatum::rootPermutation(const WeightInvolution& q) const
+Permutation RootDatum::rootPermutation(const WeightInvolution& q) const
 {
-  permutations::Permutation result(numRoots());
+  RootNbrList simple_image(semisimpleRank());
 
-  for (RootNbr alpha=0; alpha<numRoots(); ++alpha)
-  {
-    result[alpha] = rootNbr(q*root(alpha));
-    assert(result[alpha]<numRoots()); // image by |q| must be some root
-  }
+  for (weyl::Generator s=0; s<semisimpleRank(); ++s)
+    simple_image[s] = rootNbr(q*simpleRoot(s));
 
-  return result;
+  return extend_to_roots(simple_image);
 }
 
 

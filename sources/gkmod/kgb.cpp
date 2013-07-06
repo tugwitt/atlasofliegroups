@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 #include "arithmetic.h"	// functions
 #include "bruhat.h"
@@ -38,6 +39,7 @@
 #include "subsystem.h"
 #include "tits.h"
 #include "weyl.h"
+#include "involutions.h" // for |InvolutionTable|
 
 #include "basic_io.h"
 #include "prettyprint.h"
@@ -95,6 +97,11 @@ GlobalTitsElement KGB_elt_entry::repr() const
 
 */
 
+const RootDatum& KGB_base::rootDatum() const { return G.rootDatum(); }
+const WeylGroup& KGB_base::weylGroup() const { return G.weylGroup(); }
+const TwistedWeylGroup& KGB_base::twistedWeylGroup() const
+  { return G.twistedWeylGroup(); }
+
 KGBElt KGB_base::cross(const WeylWord& ww, KGBElt x) const
 {
   for (size_t i=ww.size(); i-->0;)
@@ -125,6 +132,32 @@ size_t KGB_base::packet_size(const TwistedInvolution& w) const
   return first_of_tau[i+1]-first_of_tau[i];
 }
 
+// compute Cartan class using |G.involution_table()|
+CartanNbr KGB_base::Cartan_class(KGBElt x) const
+{
+  const Cartan_orbits& i_tab = G.involution_table();
+  // compute passing by involution index, |TwistedInvolution|, |InvolutionNbr|
+  return i_tab.Cartan_class(involution(x));
+}
+
+unsigned int KGB_base::length(KGBElt x) const
+{
+  const Cartan_orbits& i_tab = G.involution_table();
+  return i_tab.length(involution(x));
+}
+
+const WeightInvolution& KGB_base::involution_matrix(KGBElt x) const
+{
+  const Cartan_orbits& i_tab = G.involution_table();
+  return i_tab.matrix(involution(x));
+}
+
+InvolutionNbr KGB_base::inv_nr(KGBElt x) const
+{
+  const Cartan_orbits& i_tab = G.involution_table();
+  return i_tab.nr(involution(x));
+}
+
 /*
 
         The |KGB_base| class implementation, protected methods
@@ -140,10 +173,9 @@ void KGB_base::reserve (size_t n)
 }
 
 // add a slot to the |info| array, and reserve space in the |data| arrays
-void KGB_base::add_element
-  (unsigned int length, TwistedInvolution tw)
+void KGB_base::add_element()
 {
-  info.push_back(KGBEltInfo(length,tw));
+  info.push_back(EltInfo());
   for (size_t s=0; s<data.size(); ++s)
     data[s].push_back(KGBfields());
 }
@@ -157,11 +189,13 @@ void KGB_base::add_element
 
 // create structure incorporating all KGB structures for a given inner class
 global_KGB::global_KGB(ComplexReductiveGroup& G)
-  : KGB_base(G.twistedWeylGroup())
+  : KGB_base(G,G.semisimpleRank())
   , Tg(G) // construct global Tits group as subobject
-  , fiber_data(G,(generate_involutions(G.numInvolutions()),inv_hash))
   , elt()
 {
+  G.involution_table().add(G,~ BitMap(G.numCartanClasses()));
+  generate_involutions(G.numInvolutions());
+
   size_t size = G.global_KGB_size();
   elt.reserve(size);
   KGB_base::reserve(size);
@@ -181,31 +215,36 @@ global_KGB::global_KGB(ComplexReductiveGroup& G)
 	     it=gr.begin(); it(); ++it)
 	rw += G.rootDatum().fundamental_coweight(*it); // a sum of f. coweights
 
-      TwistedInvolution e; // identity
       for (unsigned long i=0; i<fg.size(); ++i)
       {
-	tits::TorusElement t=tits::exp_pi(rw);
+	TorusElement t=y_values::exp_pi(rw);
 	t += fg.fromBasis // add |TorusPart| from fiber group; bits from |i|
 	  (SmallBitVector(RankFlags(i),fg.dimension()));
 	elt.push_back(GlobalTitsElement(t));
-	add_element(0,e); // create in base; length, tw both trivial
+	add_element(); // create in base
       } // |for (i)|
     } // |for (c)|
     first_of_tau.push_back(elt.size()); // end of fundamental fiber
   }
 
-  generate(G.rootDatum(),size);
+  generate(size);
 
 }
 
 global_KGB::global_KGB(ComplexReductiveGroup& G,
 		       const GlobalTitsElement& x)
-  : KGB_base(G.twistedWeylGroup())
+  : KGB_base(G,G.semisimpleRank())
   , Tg(G) // construct global Tits group as subobject
-  , fiber_data(G,(generate_involutions(G.numInvolutions()),inv_hash))
   , elt()
 {
+  generate_involutions(G.numInvolutions());
   assert(Tg.is_valid(x)); // unless this holds, we cannot hope to succeed
+
+  Cartan_orbits& i_tab = G.involution_table();
+  const RootDatum& rd = G.rootDatum();
+
+  i_tab.add(G,~ BitMap(G.numCartanClasses())); // generate all
+
   GlobalTitsElement a=x; // start at an element that we certainly want
   weyl::Generator s;
   while ((s=Tg.weylGroup().leftDescent(a.tw()))<rank())
@@ -216,48 +255,52 @@ global_KGB::global_KGB(ComplexReductiveGroup& G,
 
   assert(Tg.is_valid(a)); // check that we still have a valid element
   assert (a.tw()==TwistedInvolution()); // we are at fundamental fiber
+
   { // get elements at the fundamental fiber
+    InvolutionNbr inv = i_tab.nr(a.tw());
     first_of_tau.push_back(0); // start of fundamental fiber
     KGB_elt_entry::Pooltype elt_pool;
     hashtable::HashTable<KGB_elt_entry,unsigned long> elt_hash(elt_pool);
-    add_element(0,a.tw()); // create in base; length, tw
-    elt_hash.match(fiber_data.pack(a));
 
-    /* Generate fundamental fiber. We use that cross actions by imaginary,
-       non-compact, simple roots suffice, but without knowing a nice proof. */
+    elt_hash.match(i_tab.x_pack(a));
+
+    // generating reflections are for simple-imaginary roots at |inv|
+    const RootNbrList& gen_root = i_tab.imaginary_basis(inv);
     for (size_t i=0; i<elt_hash.size(); ++i) // |elt_hash| grows during loop
-      for (weyl::Generator s=0; s<rank(); ++s)
-	if (Tg.twisted(s)==s // then imaginary, since fiber is fundamental
-	    and not Tg.compact(s,a=elt_hash[i].repr())) // noncompact
-	{
-	  Tg.cross_act(s,a);
-	  size_t old_size = elt_hash.size();
-	  if (elt_hash.match(fiber_data.pack(a))==old_size) // then it's new
- 	    add_element(0,a.tw()); // create in base; length, tw
-	}
+    {
+      add_element(); // create in base
+      for (size_t k=0; k<gen_root.size(); ++k)
+	elt_hash.match(i_tab.x_pack
+	  (Tg.cross(rd.reflectionWord(gen_root[k]),elt_hash[i].repr())));
+    }
+
     first_of_tau.push_back(elt_hash.size()); // end of fundamental fiber
 
     elt.reserve(elt_hash.size()); // now copy elements from hash table to |elt|
     for (size_t i=0; i<elt_hash.size(); ++i)
       elt.push_back(elt_hash[i].repr());
-  }
-  generate(G.rootDatum(),0); // complete element generation, no predicted size
+  } // got elements at the fundamental fiber
+
+  generate(0); // complete element generation, no predicted size
 } // |global_KGB::global_KGB|
 
-bool global_KGB::compact(const RootDatum& rd,
-			 RootNbr n, // assumed imaginary at |a|
+bool global_KGB::compact(RootNbr n, // assumed imaginary at |a|
 			 const GlobalTitsElement& a) const
 {
-  const rootdata::Root& alpha= rd.root(n);
-  return a.torus_part().negative_at(alpha) == // question was: whether compact
-    (fiber_data.at_rho_imaginary(alpha,a.tw())%2!=0); // CHECK ME!
+  const Cartan_orbits& i_tab = G.involution_table();
+  TorusElement t=a.torus_part();
+  t += i_tab.check_rho_imaginary(i_tab.nr(a.tw()));
+
+  return not t.negative_at(rootDatum().root(n)); //  whether compact
 }
 
 KGBElt global_KGB::lookup(const GlobalTitsElement& a) const
 {
+  const Cartan_orbits& i_tab = G.involution_table();
+
   KGBEltPair p = tauPacket(a.tw());
   for (KGBElt x=p.first; x<p.second; ++x)
-    if (fiber_data.equivalent(element(x),a))
+    if (i_tab.x_equiv(element(x),a))
       return x;
   return size(); // report failure
 }
@@ -280,173 +323,136 @@ void global_KGB::generate_involutions(size_t n)
   inv_pool.reserve(n);  // filled below
   first_of_tau.reserve(n+1); // to be filled by constructor of derived object
 
+  const TwistedWeylGroup& W = twistedWeylGroup();
+
+  InvolutionNbr end_length=0; // end of the length-interval under construction
   inv_hash.match(TwistedInvolution()); // set initial element
-  for (size_t i=0; i<inv_pool.size(); ++i) // pool grows from 1 to |n|
+
+  while (end_length<inv_hash.size())
   {
-    const weyl::TI_Entry& parent=inv_pool[i];
+    const InvolutionNbr start_length=end_length; // start new interval here
+    end_length = inv_pool.size(); // and run until current end
+
     for (weyl::Generator s=0; s<W.rank(); ++s)
-      if (W.hasTwistedCommutation(s,parent))
-	inv_hash.match(W.prod(s,parent));
-      else
-        inv_hash.match(W.twistedConjugated(parent,s));
-  }
+      for (InvolutionNbr i=start_length; i<end_length; ++i)
+      {
+	const weyl::TI_Entry& parent=inv_pool[i];
+	if (W.hasTwistedCommutation(s,parent))
+	  inv_hash.match(W.prod(s,parent));
+	else
+	  inv_hash.match(W.twistedConjugated(parent,s));
+      } // |for(i)|; |for(s)|;
+  } // while length interval non-empty
+
   assert(inv_pool.size()==n);
 } // |global_KGB::generate_involutions|
 
-void global_KGB::generate(const RootDatum& rd, size_t predicted_size)
+void global_KGB::generate(size_t predicted_size)
 {
-  const TwistedWeylGroup& W = Tg; // for when |GlobalTitsGroup| not used
+  const Cartan_orbits& i_tab = G.involution_table();
+  const TwistedWeylGroup& W = Tg; // for when |GlobalTitsGroup| is not used
 
   KGB_elt_entry::Pooltype elt_pool; elt_pool.reserve(predicted_size);
   hashtable::HashTable<KGB_elt_entry,KGBElt> elt_hash(elt_pool);
 
-  {
-    TwistedInvolution e; // identity
-    for (size_t i=0; i<elt.size(); ++i)
-      elt_hash.match(fiber_data.pack(elt[i]));
+  KGBElt end_length=0; // end of the length-interval under construction
 
-    assert(elt_hash.size()==elt.size()); // all distinct; in fact an invariant
-  }
+  for (size_t i=0; i<elt.size(); ++i)
+    elt_hash.match(i_tab.x_pack(elt[i]));
 
-  for (size_t inv_nr=0; inv_nr<inv_pool.size(); ++inv_nr)
+  assert(elt_hash.size()==elt.size()); // all distinct; in fact an invariant
+
+  while (end_length<first_of_tau.size()-1)
   {
-    const TwistedInvolution& tw = inv_pool[inv_nr];
+    const KGBElt start_length=end_length; // start new interval here
+    end_length = first_of_tau.size()-1; // and run until current end
+
     for (weyl::Generator s=0; s<W.rank(); ++s)
-    {
-      TwistedInvolution new_tw =W.twistedConjugated(tw,s);
-      size_t new_nr = inv_hash.find(new_tw);
-      bool is_new = new_nr+1 >= first_of_tau.size();
-      if (is_new)
-	assert(new_nr+1==first_of_tau.size()); // since we mimick generation
-      bool imaginary = new_nr==inv_nr and not W.hasDescent(s,tw);
-
-      // generate cross links
-      for (KGBElt x=first_of_tau[inv_nr]; x<first_of_tau[inv_nr+1]; ++x)
+      for (InvolutionNbr inv_nr=start_length; inv_nr<end_length; ++inv_nr)
       {
- 	GlobalTitsElement child=elt[x]; //start out with a copy
-	int d = Tg.cross_act(s,child); // cross act; |d| is length difference
-	assert(child.tw()==new_tw);
-	KGB_elt_entry ee = fiber_data.pack(child);
-	KGBElt k = elt_hash.match(ee);
-	if (k==elt.size()) // then new
-	{
-	  assert(is_new);
-	  elt.push_back(child);
-	  assert(fiber_data.Cartan_class(new_tw)==Cartan_class(x));
-	  add_element(length(x)+d,/* Cartan_class(x), */new_tw);
-	}
-	data[s][x].cross_image=k;
-
-	if (d!=0) // just made complex cross action
-	{
-	  info[x].status.set(s,gradings::Status::Complex);
-	  info[x].desc.set(s,d<0);
-	}
-	else if (imaginary)
-	{
-	  info[x].status.set_imaginary // always true (noncompact) at identity
-	    (s,not elt[x].torus_part().negative_at(rd.simpleRoot(s)));
-	  info[x].desc.set(s,false); // imaginary roots are never descents
-	}
-	else // real
-	{
-	  assert(x==k);
-	  info[x].status.set(s,gradings::Status::Real);
-	  info[x].desc.set(s,true); // real roots are always descents
-	}
-      } // |for(x)|
-
-      // generate Cayley links
-      if (imaginary)
-      {
-	new_tw = W.prod(s,tw);
-	new_nr = inv_hash.find(new_tw);
-	is_new = new_nr+1 >= first_of_tau.size();
+	const TwistedInvolution& tw = inv_pool[inv_nr];
+	TwistedInvolution new_tw =W.twistedConjugated(tw,s);
+	InvolutionNbr new_nr = inv_hash.find(new_tw);
+	bool is_new = new_nr+1 >= first_of_tau.size();
 	if (is_new)
 	  assert(new_nr+1==first_of_tau.size()); // since we mimick generation
+	bool imaginary = new_nr==inv_nr and not W.hasDescent(s,tw);
 
+	// generate cross links
 	for (KGBElt x=first_of_tau[inv_nr]; x<first_of_tau[inv_nr+1]; ++x)
-	  if (info[x].status[s]==gradings::Status::ImaginaryNoncompact)
+	{
+	  GlobalTitsElement child=elt[x]; //start out with a copy
+	  int d = Tg.cross_act(s,child); // cross act; |d| is length difference
+	  assert(child.tw()==new_tw);
+	  KGB_elt_entry ee = i_tab.x_pack(child);
+	  KGBElt k = elt_hash.match(ee);
+	  if (k==elt.size()) // then new
 	  {
-	    GlobalTitsElement child=Tg.Cayley(s,elt[x]);
-	    assert(child.tw()==new_tw);
-	    KGBElt k=elt_hash.match(fiber_data.pack(child));
-	    if (k==elt.size()) // then new
+	    assert(is_new);
+	    elt.push_back(child);
+	    assert(i_tab.Cartan_class(new_tw)==Cartan_class(x));
+	    add_element();
+	  }
+	  data[s][x].cross_image=k;
+
+	  if (d!=0) // just made complex cross action
+	  {
+	    info[x].status.set(s,gradings::Status::Complex);
+	    info[x].desc.set(s,d<0);
+	  }
+	  else if (imaginary)
+	  {
+	    info[x].status.set_imaginary // always true (noncompact) at identity
+	      (s,
+	       not elt[x].torus_part().negative_at(rootDatum().simpleRoot(s)));
+	    info[x].desc.set(s,false); // imaginary roots are never descents
+	  }
+	  else // real
+	  {
+	    assert(x==k);
+	    info[x].status.set(s,gradings::Status::Real);
+	    info[x].desc.set(s,true); // real roots are always descents
+	  }
+	} // |for(x)|
+
+	// generate Cayley links
+	if (imaginary)
+	{
+	  new_tw = W.prod(s,tw);
+	  new_nr = inv_hash.find(new_tw);
+	  is_new = new_nr+1 >= first_of_tau.size();
+	  if (is_new)
+	    assert(new_nr+1==first_of_tau.size()); // since we mimick generation
+
+	  for (KGBElt x=first_of_tau[inv_nr]; x<first_of_tau[inv_nr+1]; ++x)
+	    if (info[x].status[s]==gradings::Status::ImaginaryNoncompact)
 	    {
-	      elt.push_back(child);
-	      add_element(length(x)+1,/*fiber_data.Cartan_class(new_tw),*/
-			  new_tw);
-	    }
-	    data[s][x].Cayley_image = k;
-	    if (data[s][k].inverse_Cayley_image.first==UndefKGB)
-	      data[s][k].inverse_Cayley_image.first=x;
-	    else
-	      data[s][k].inverse_Cayley_image.second=x;
+	      GlobalTitsElement child=Tg.Cayley(s,elt[x]);
+	      assert(child.tw()==new_tw);
+	      KGBElt k=elt_hash.match(i_tab.x_pack(child));
+	      if (k==elt.size()) // then new
+	      {
+		elt.push_back(child);
+		add_element();
+	      }
+	      data[s][x].Cayley_image = k;
+	      if (data[s][k].inverse_Cayley_image.first==UndefKGB)
+		data[s][k].inverse_Cayley_image.first=x;
+	      else
+		data[s][k].inverse_Cayley_image.second=x;
 
-	  } // |for (x)|
-      } // |if (imaginary)|
+	    } // |for (x)|
+	} // |if (imaginary)|
 
-      if (is_new) // in upwards cross action or Cayley transform, never both
-	first_of_tau.push_back(elt.size()); // close the tau packet
+	if (is_new) // in upwards cross action or Cayley transform, never both
+	  first_of_tau.push_back(elt.size()); // close the tau packet
 
 
-    } // |for(s)|
-  } // |for(inv_nr)|
+      } // |for(inv_nr)|;  // |for(s)|
+  } // while length interval non-empty
 
   assert(elt.size()==predicted_size or predicted_size==0);
 } // |global_KGB::generate|
-
-/*!
-\brief A |FiberData| object associates to each twisted involution a subspace
-describing how corresponding Tits elements should be normalized.
-
-It also records the Cartan class that each twisted involution belongs to.
-*/
-class FiberData
-{
-  const TitsGroup& Tits;
-  weyl::TI_Entry::Pooltype pool;
-  hashtable::HashTable<weyl::TI_Entry,unsigned int> hash_table;
-  std::vector<BinaryMap> refl; // transposed simple refl mod 2
-  std::vector<SmallSubspace> data;
-  std::vector<unsigned int> involution_length;
-  std::vector<unsigned int> Cartan_class;
-public:
-  FiberData(ComplexReductiveGroup& G,
-	    const BitMap& Cartan_classes);
-
-  FiberData(const TitsGroup& Tg); // start without any classes
-
-  size_t n_involutions() const { return pool.size(); }
-  const TwistedInvolution& involution(size_t i) const { return pool[i]; }
-
-  unsigned int seq_no(const TwistedInvolution& tw) const
-  { return hash_table.find(tw); }
-
-  bool unseen(const TwistedInvolution& tw) const
-  { return seq_no(tw)==hash_table.empty; }
-
-  unsigned int length(size_t i) const { return involution_length[i]; }
-
-  unsigned int cartanClass(const TwistedInvolution& tw) const
-  { return Cartan_class[seq_no(tw)]; }
-
-  void reduce(TitsElt& a) const;
-
-  // manipulator
-  void add_class(const TwistedInvolution& tw,
-		 const WeightInvolution& theta);
-
-private: // the space actually stored need not be exposed
-  const SmallSubspace& mod_space(const TitsElt& a) const
-  {
-    size_t i=hash_table.find(a.tw());
-    assert(i!=hash_table.empty);
-    return data[i];
-  }
-  void complete_class(unsigned int initial); // extend by conjugations
-}; // |class FiberData|
-
 
 
 
@@ -456,37 +462,180 @@ private: // the space actually stored need not be exposed
 
 */
 
-/*!
-  \brief Construct the KGB data structure for the given real form,
-  but if any Cartan classes are specified, only for those classes
-
-  This really handles two cases (the standard construction and a specialized
-  one for a small set of Cartan classes) in one. The reason that they are
-  combined into a single constructor is that this allows a single constructor
-  of a containing class to choose between the two methods (a constructor
-  method must use a fixed constructor for each of its sub-objects, so having
-  multiple constructors here would force the same for every containing class).
-*/
 KGB::KGB(RealReductiveGroup& GR,
 	 const BitMap& Cartan_classes)
-  : KGB_base(GR.twistedWeylGroup())
-  , rd(GR.rootDatum())
+  : KGB_base(GR.complexGroup(),GR.complexGroup().semisimpleRank())
   , Cartan()
   , left_torus_part()
   , d_state()
   , d_bruhat(NULL)
   , d_base(NULL)
 {
-  bool traditional= Cartan_classes.size()==0; // whether traditional generation
-  size_t size = generate(GR,Cartan_classes);
+  ComplexReductiveGroup& G=GR.complexGroup();
+  //const TitsGroup& Tg = G.titsGroup();
+  size_t rank = G.semisimpleRank(); // |G.rank()| does not interest us here
 
-  // check that the size is right
-  assert(size == (traditional ? GR.KGB_size()
-		  : GR.complexGroup().KGB_size(GR.realForm(),Cartan_classes)
-		  ));
+  {// check |Cartan_classes|
+    BitMap test_set = GR.Cartan_set();
+    test_set.andnot(Cartan_classes);
+    for (BitMap::iterator it=test_set.begin(); it(); ++it)
+      assert(G.Cartan_ordering().below(*it).disjoint(Cartan_classes));
+  }
 
+  // make sure |G| has information about involutions for |Cartan_classes|
+  Cartan_orbits& i_tab = G.involution_table();
+  i_tab.add(G,Cartan_classes);
+
+  tits::TE_Entry::Pooltype elt_pool; // of size |size()|
+  hashtable::HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
+
+  size_t size = G.KGB_size(GR.realForm(),Cartan_classes);
+
+  elt_pool.reserve(size);
+  KGB_base::reserve(size);
+
+  {
+    tits::EnrichedTitsGroup square_class_base(GR);
+    d_base = new TitsCoset(square_class_base);
+    RealFormNbr rf=GR.realForm();
+    assert(square_class_base.square()==
+	   G.fundamental().central_square_class(rf));
+
+    set::EltList mins=G.Cartan_ordering().minima(Cartan_classes);
+
+    for (set::EltList::iterator it=mins.begin(); it!=mins.end(); ++it)
+    {
+      const CartanNbr cn = *it;
+      TitsElt a=
+	(mins.size()==1 // use backtrack only in (unused) multiple minima case
+	 ? square_class_base.grading_seed(G,rf,cn)
+	 : square_class_base.backtrack_seed(G,rf,cn)
+	 );
+
+      i_tab.reduce(a);
+      size_t k=elt_hash.match(a);
+      assert(k==info.size()); // this KGB element should be new
+      KGB_base::add_element(); // add additional info for element |k|
+    } // |for (it)|
+  }
+
+  for (KGBElt x=0; x<elt_hash.size(); ++x) // loop makes |elt_hash| grow
+  {
+    // extend by cross actions
+    const TitsElt& current = elt_pool[x];
+    EltInfo& my_info = info[x];
+
+    for (weyl::Generator s=0; s<rank; ++s)
+    {
+      KGBfields& my_s = data[s][x];
+      TitsElt a = current; d_base->basedTwistedConjugate(a,s);
+      i_tab.reduce(a);
+
+      int lc=
+	a.tw()==current.tw() ? 0 : weylGroup().length_change(s,current.w());
+
+      // now find the Tits element in |elt_hash|, or add it if new
+      KGBElt child = elt_hash.match(a);
+      if (child==info.size()) // add a new Tits element
+	KGB_base::add_element();
+
+      // set cross link for |x|
+      my_s.cross_image = child;
+
+      if (lc!=0) // then set complex status, and whether ascent or descent
+      {
+	my_info.status.set(s,gradings::Status::Complex);
+	my_info.desc.set(s,lc<0);
+      }
+      else if (weylGroup().hasDescent(s,current.w())) // real
+      {
+	assert(child==x);
+	my_info.status.set(s,gradings::Status::Real);
+	my_info.desc.set(s); // real roots are always descents
+      }
+      else // imaginary
+      {
+	my_info.status.set_imaginary(s,d_base->simple_grading(current,s));
+	my_info.desc.reset(s); // imaginary roots are never (KGB) descents
+
+	if (my_info.status[s] == gradings::Status::ImaginaryNoncompact)
+	{
+	  // Cayley-transform |current| by $\sigma_s$
+	  TitsElt a = current; d_base->Cayley_transform(a,s);
+	  assert(titsGroup().length(a)>titsGroup().length(current));
+	  i_tab.reduce(a); // subspace has grown, mod out new subspace
+
+	  KGBElt child = elt_hash.match(a);
+	  if (child==info.size()) // add a new Tits element
+	    KGB_base::add_element();
+
+	  // add new Cayley link
+	  my_s.Cayley_image = child;
+
+	} // if |ImaginaryNoncompact|
+
+      } // complex/real/imaginary disjunction
+
+    } // |for(s)|
+
+  } // |for (x)|
+
+  assert(KGB_base::size()==size);
+
+  // now sort
+  Permutation a1; // will be reordering assignment
+  { // first sort involutions
+
+    std::vector<InvolutionNbr> invs;
+    invs.reserve(size); // first use needs less
+
+    for (BitMap::iterator it=Cartan_classes.begin(); it(); ++it)
+      for (InvolutionNbr i=i_tab[*it].start; i<i_tab[*it].end(); ++i)
+	invs.push_back(i);
+
+    std::stable_sort(invs.begin(),invs.end(),i_tab.less());
+
+    inv_pool.reserve(invs.size());
+    std::transform(invs.begin(), invs.end(),back_inserter(inv_pool),
+		   i_tab.as_map());
+    inv_hash.reconstruct(); // now |inv_hash| numbers in sorted order
+
+    invs.clear();
+    for (KGBElt x=0; x<size; ++x) // list involution indices; cannot yet use
+      invs.push_back(inv_hash.find(elt_pool[x].tw())); // |involution(x)| !
+
+    a1 = permutations::standardize(invs,inv_pool.size(),&first_of_tau);
+  }
+
+  Permutation a(a1,-1); // |a[x]| locates KGB element that should become |x|
+
+  // permute |data|, sending entry |x| to place |a1[x]}, renumbering internally
+  for (weyl::Generator s=0; s<rank; ++s)
+  {
+    std::vector<KGBfields>& ds = data[s];
+    a.pull_back(ds).swap(ds); // permute all the links for |s|
+    for (KGBElt x=0; x<size; ++x) // now renumber internally through |a1|
+    {
+      KGBfields& dsx = ds[x];
+      dsx.cross_image = a1[dsx.cross_image];
+      if (dsx.Cayley_image != UndefKGB)
+	dsx.Cayley_image = a1[dsx.Cayley_image];
+    }
+  }
+
+  a.pull_back(info).swap(info); // similarly permute |info|, no renumbering
+
+  left_torus_part.reserve(size);
+  for (KGBElt x=0; x<size; ++x) // pull back through |a| while constructing
+    left_torus_part.push_back(titsGroup().left_torus_part(elt_pool[a[x]]));
+
+  Cartan.reserve(inv_pool.size());
+  for (InvolutionNbr i=0; i<inv_pool.size(); ++i)
+    Cartan.push_back(i_tab.Cartan_class(inv_pool[i]));
+
+  // finally install inverse Cayley links
   for (KGBElt x=0; x<size; ++x)
-    for (weyl::Generator s=0; s<rank(); ++s)
+    for (weyl::Generator s=0; s<rank; ++s)
     {
       KGBElt c=data[s][x].Cayley_image;
       if (c!=UndefKGB)
@@ -496,7 +645,10 @@ KGB::KGB(RealReductiveGroup& GR,
 	else target.second=x;
       }
     }
-}
+} // |KGB::KGB(GR,Cartan_classes,i_tab)|
+
+
+
 
 KGB::~KGB() { delete d_bruhat; delete d_base; }
 
@@ -536,231 +688,76 @@ std::ostream& KGB::print(std::ostream& strm, KGBElt x) const
 
 */
 
-// Auxiliary class whose declaration must have been seen in |KGB::generate|
-class invol_compare
-{
-  const FiberData& fd;
-  const WeylGroup& W;
-public:
-  invol_compare(const FiberData& f, const WeylGroup& WG)
-    : fd(f), W(WG) {}
-  bool operator() (unsigned int i, unsigned int j) const
-  {
-    if (fd.length(i)!=fd.length(j)) // compare involution lengths
-      return fd.length(i)<fd.length(j);
-    unsigned long li=W.length(fd.involution(i)); // then Weyl group lengths
-    unsigned long lj=W.length(fd.involution(j));
-    return li!=lj ? li<lj
-      : fd.involution(i)<fd.involution(j); // if all else fails, internal |<|
-  }
-}; // |class invol_compare|
+// Construct the BruhatOrder
 
-
-size_t KGB::generate
-  (RealReductiveGroup& GR, const BitMap& Cartan_classes)
-{
-  ComplexReductiveGroup& G=GR.complexGroup();
-  size_t rank = G.semisimpleRank();
-  bool traditional=Cartan_classes.size()==0; // whether traditional generation
-
-  tits::TE_Entry::Pooltype elt_pool; // of size |size()|
-  hashtable::HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
-
-  //! Permits reducing each Tits group element modulo its fiber denominator
-  FiberData fiber_data(G, traditional ? GR.Cartan_set() : Cartan_classes);
-
-  size_t size =
-    traditional ? GR.KGB_size() : G.KGB_size(GR.realForm(),Cartan_classes);
-
-  elt_pool.reserve(size);
-  KGB_base::reserve(size);
-
-  if (traditional)
-  {
-    d_base = new TitsCoset(G,GR.grading_offset());
-
-    elt_hash.match(TitsElt(titsGroup())); // identity Tits element is seed
-    // store its length and Cartan class (both are in fact always 0)
-    const TwistedInvolution& tw = elt_hash[0].tw();
-    KGB_base::add_element(0,tw);
-  }
-  else
-  {
-    tits::EnrichedTitsGroup square_class_base(GR);
-    d_base = new TitsCoset(square_class_base);
-    RealFormNbr rf=GR.realForm();
-    assert(square_class_base.square()==
-	   G.fundamental().central_square_class(rf));
-
-    set::EltList m=G.Cartan_ordering().minima(Cartan_classes);
-
-    for (size_t i=0; i<m.size(); ++i)
-    {
-      TitsElt a=
-	(m.size()==1 // use backtrack only in case of multiple minimal classes
-	 ? square_class_base.grading_seed(G,rf,m[i])
-	 : square_class_base.backtrack_seed(G,rf,m[i])
-	 );
-
-      fiber_data.reduce(a);
-
-      size_t k=elt_hash.match(a);
-      assert(k==info.size()); // this KGB element should be new
-      const TwistedInvolution& tw = elt_hash[k].tw();
-      unsigned int l = G.twistedWeylGroup().involutionLength(tw);
-
-      // add additional information (length, involution) for this KGB element
-      KGB_base::add_element(l,tw);
-    } // |for (i)|
-  } // |if(traditional)|
-
-  for (KGBElt x=0; x<elt_hash.size(); ++x) // loop makes |elt_hash| grow
-  {
-    // extend by cross actions
-    const TitsElt& current = elt_pool[x];
-
-    for (weyl::Generator s=0; s<rank; ++s)
-    {
-      TitsElt a = current; d_base->basedTwistedConjugate(a,s);
-      fiber_data.reduce(a);
-
-      int lc=
-	a.tw()==current.tw() ? 0 : weylGroup().length_change(s,current.w());
-
-      // now find the Tits element in |elt_hash|, or add it if new
-      KGBElt child = elt_hash.match(a);
-      if (child==info.size()) // add a new Tits element
-      {
-	unsigned int l = info[x].length+lc;
-	KGB_base::add_element(l,a.tw());
-      }
-
-      // set cross links for |x|
-      data[s][x].cross_image = child;
-
-      if (lc!=0) // then set complex status, and whether ascent or descent
-      {
-	info[x].status.set(s,gradings::Status::Complex);
-	info[x].desc.set(s,lc<0);
-      }
-      else if (weylGroup().hasDescent(s,current.w())) // real
-      {
-	assert(child==x);
-	info[x].status.set(s,gradings::Status::Real);
-	info[x].desc.set(s); // real roots are always descents
-      }
-      else // imaginary
-      {
-	info[x].status.set_imaginary
-	  (s,d_base->simple_grading(current,s));
-	info[x].desc.reset(s); // imaginary roots are never descents
-
-	if (info[x].status[s] == gradings::Status::ImaginaryNoncompact)
-	{
-	  // Cayley-transform |current| by $\sigma_s$
-	  TitsElt a = current; d_base->Cayley_transform(a,s);
-	  assert(titsGroup().length(a)>titsGroup().length(current));
-	  fiber_data.reduce(a); // subspace has grown, mod out new subspace
-
-	  KGBElt child = elt_hash.match(a);
-	  if (child==info.size()) // add a new Tits element
-	  {
-	    unsigned int l = info[x].length+1; // length goes up
-	    KGB_base::add_element(l,a.tw());
-	  }
-	  // add new Cayley link
-	  data[s][x].Cayley_image = child;
-
-	} // if |ImaginaryNoncompact|
-
-      } // complex/real/imaginary disjunction
-
-    } // |for(s)|
-
-  } // |for (x)|
-
-  // now sort and export to |tits|
-  permutations::Permutation a1; // will be reordering assignment
-  { // sort involutions (rather than KGB elements, for efficiency)
-    permutations::Permutation p(fiber_data.n_involutions(),1);
-    invol_compare i_cmp(fiber_data,G.weylGroup());
-    std::sort(p.begin(),p.end(),i_cmp); // all entries are distinct
-    permutations::Permutation p1(p,-1); // inverse: where involutions went
-
-    std::vector<KGBElt> involution_rank(size); // values are small numbers
-    for (KGBElt x=0; x<size; ++x)
-      involution_rank[x] = p1[fiber_data.seq_no(elt_pool[x].w())];
-    a1 = permutations::standardize(involution_rank,fiber_data.n_involutions());
-  }
-
-  permutations::Permutation a(a1,-1); // |a[i]| locates what should map to |i|
-
-  for (weyl::Generator s=0; s<rank; ++s)
-  {
-    a.pull_back(data[s]).swap(data[s]);
-    for (KGBElt x=0; x<size; ++x)
-    {
-      data[s][x].cross_image = a1[data[s][x].cross_image];
-      if (data[s][x].Cayley_image != UndefKGB)
-	data[s][x].Cayley_image = a1[data[s][x].Cayley_image];
-    }
-  }
-
-  a.pull_back(info).swap(info); // only permute here, no data to renumber
-
-  left_torus_part.reserve(size);
-  for (KGBElt x=0; x<size; ++x) // pull back through |a| while constructing
-    left_torus_part.push_back(titsGroup().left_torus_part(elt_pool[a[x]]));
-
-  Cartan.reserve(traditional
-		 ? GR.numInvolutions()
-		 : G.numInvolutions(Cartan_classes));
-  first_of_tau.reserve(Cartan.capacity()+1);
-
-  for (KGBElt x=0; x<size; ++x)
-  {
-    unsigned int h=inv_hash.match(involution(x));
-    if (h==first_of_tau.size()) // then twisted involution was not seen before
-    {
-      first_of_tau.push_back(x); // push KGB element as first for involution
-      Cartan.push_back(fiber_data.cartanClass(involution(x)));
-    }
-    else // check that all non-new involutions are equal to most recent one
-      assert(h==first_of_tau.size()-1);
-  }
-  first_of_tau.push_back(size); // push terminating number
-
-
-  return size;
-} // |KGB::generate|
-
-// find Cartan class: locate |x| within |first_of_tau|, then index |Cartan|
-size_t KGB::Cartan_class(KGBElt x) const
-{
-  size_t i = involution_index(x); // index of first larger entry, minus one
-  assert(i<Cartan.size());
-  return Cartan[i];
-}
-
-/*!
-  \brief Constructs the BruhatOrder.
-
-  NOTE: may throw a MemoryOverflow error. Commit-or-rollback is guaranteed.
-*/
 void KGB::fillBruhat()
-
 {
   if (d_state.test(BruhatConstructed)) // work was already done
     return;
 
   std::vector<set::EltList> hd; makeHasse(hd,*this);
-  BruhatOrder* bp = new BruhatOrder(hd);
+  BruhatOrder* bp = new BruhatOrder(hd); // pointer stored immediately: safe
 
   // commit
-  delete d_bruhat; // this is overly careful: it must be NULL
+  assert(d_bruhat==NULL); // so no |delete| is needed
   d_bruhat = bp;
   d_state.set(BruhatConstructed);
 }
+
+
+/*!
+\brief A |FiberData| object associates to each twisted involution a subspace
+describing how corresponding Tits elements should be normalized.
+
+It also records the Cartan class that each twisted involution belongs to.
+*/
+class FiberData
+{
+  const TitsGroup& Tits;
+  weyl::TI_Entry::Pooltype pool;
+  hashtable::HashTable<weyl::TI_Entry,unsigned int> hash_table;
+  std::vector<BinaryMap> refl; // transposed simple reflections mod 2
+
+  // the following three vectors are indexed by |hash_table| sequence numbers
+  std::vector<SmallSubspace> data;
+  std::vector<unsigned int> involution_length;
+  std::vector<unsigned int> Cartan_class;
+public:
+  FiberData(ComplexReductiveGroup& G,
+	    const BitMap& Cartan_classes); // for |KGB::generate|
+
+  FiberData(const TitsGroup& Tg); // for |subsys_KGB|; start without classes
+
+  InvolutionNbr n_involutions() const { return pool.size(); }
+  const TwistedInvolution& involution(InvolutionNbr i) const { return pool[i]; }
+
+  InvolutionNbr seq_no(const TwistedInvolution& tw) const
+  { return hash_table.find(tw); }
+
+  bool unseen(const TwistedInvolution& tw) const
+  { return seq_no(tw)==hash_table.empty; }
+
+  unsigned int length(InvolutionNbr i) const { return involution_length[i]; }
+
+  CartanNbr cartanClass(const TwistedInvolution& tw) const
+  { return Cartan_class[seq_no(tw)]; }
+
+  void reduce(TitsElt& a) const;
+
+  // manipulator
+  void add_class(const TwistedInvolution& tw,
+		 const WeightInvolution& theta);
+
+private: // the space actually stored need not be exposed
+  const SmallSubspace& mod_space(const TitsElt& a) const
+  {
+    size_t i=hash_table.find(a.tw());
+    assert(i!=hash_table.empty);
+    return data[i];
+  }
+  void complete_class(unsigned int initial); // extend by conjugations
+}; // |class FiberData|
+
 
 
 
@@ -776,63 +773,60 @@ subsys_KGB::subsys_KGB
   (const KGB& kgb,
    const subdatum::SubDatum& sub,       // subsystem is on dual side
    KGBElt x)
-  : KGB_base(sub.Tits_group())
+  : KGB_base(kgb.complexGroup(),sub.semisimple_rank())
   , in_parent()
   , Cartan()
   , torus_part()
   , parent_size(kgb.size())
 {
+  // no need to extend |G.involution_table()| since building |kgb| did that
 
   size_t sub_rank = sub.semisimple_rank();
 
-  TitsCoset Tg(sub,kgb.base_grading()); // constructor converts
-  const WeylGroup& W = Tg.weylGroup();
+  const TitsCoset Tc(sub,kgb.base_grading()); // constructor converts grading
+  const TitsGroup& Tg = Tc.titsGroup(); // we need this several times
+  const WeylGroup& W = Tc.weylGroup();
 
-  TitsElt cur_x (Tg.titsGroup(),kgb.torus_part(x),sub.init_twisted());
+  TitsElt cur_x (Tg,kgb.torus_part(x),sub.init_twisted());
 
   { // modify |cur_x|, descending to minimal element for |subsys|
     weyl::Generator s;
     do
-    {
       for(s=0; s<sub_rank; ++s)
-      {
 	if (W.hasDescent(s,cur_x.tw()))
 	{
-	  if (Tg.hasTwistedCommutation(s,cur_x.tw())) // real
+	  if (Tc.hasTwistedCommutation(s,cur_x.tw())) // real
 	  {
-	    SmallSubspace mod_space =
-	      tits::fiber_denom(sub.involution(cur_x.tw()));
-	    Tg.inverse_Cayley_transform(cur_x,s,mod_space);
+	    SmallSubspace mod_space = tits::fiber_denom(sub.matrix(cur_x.tw()));
+	    Tc.inverse_Cayley_transform(cur_x,s,mod_space);
 	  }
 	  else // complex descent
-	    Tg.basedTwistedConjugate(cur_x,s);
+	    Tc.basedTwistedConjugate(cur_x,s);
 	  break;
-	} // |if(isDescent)|
-      } // |for(s)|
-    } while(s<sub_rank); // loop until no descents found in |sub|
+	} // |if(isDescent), |for(s)|
+    while(s<sub_rank); // loop until no descents found in |sub|
   }
 
   tits::TE_Entry::Pooltype elt_pool(1,tits::TE_Entry(cur_x));
   hashtable::HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
 
-  FiberData fd(Tg.titsGroup());
+  FiberData fd(Tg);
 
   { // get elements at the fundamental fiber
     TwistedInvolution tw = cur_x.tw();
-    unsigned int l = Tg.titsGroup().involutionLength(tw);
-    fd.add_class(tw,sub.involution(tw));
+    fd.add_class(tw,sub.matrix(tw));
     first_of_tau.push_back(0); // start of fundamental fiber
     inv_hash.match(tw); // set initial twisted involution
 
     for (KGBElt cur=0; cur<elt_pool.size(); ++cur) // |elt_pool| grows
     {
-      add_element(l,tw); // create |cur| in |info| array of base object
+      add_element(); // create |cur| in |info| array of base object
       for (weyl::Generator s=0; s<sub_rank; ++s)
  	if (not W.hasDescent(s,tw) // currently this is assured, could change
-	    and Tg.hasTwistedCommutation(s,tw)) // imaginary simple reflection
+	    and Tc.hasTwistedCommutation(s,tw)) // imaginary simple reflection
  	{
 	  TitsElt x = elt_pool[cur]; // take a copy
-	  Tg.basedTwistedConjugate(x,s);
+	  Tc.basedTwistedConjugate(x,s);
  	  assert(x.tw()==tw); // stay in fiber
 	  fd.reduce(x);
 	  elt_hash.match(x); // add to table if new
@@ -842,37 +836,36 @@ subsys_KGB::subsys_KGB
   }
 
   // now generate fibers at other twisted involutions
-  for (size_t i=0; i<inv_pool.size(); ++i) // inv_pool grows
+  for (InvolutionNbr i=0; i<inv_pool.size(); ++i) // inv_pool grows
   {
     const TwistedInvolution source=inv_pool[i]; // keep a copy for speed
-    unsigned int l=length(first_of_tau[i]); // length of any |x| below
 
     for (weyl::Generator s=0; s<sub_rank; ++s)
     {
-      unsigned int k =
-	inv_hash.match(Tg.titsGroup().twistedConjugated(source,s));
+      InvolutionNbr k = inv_hash.match(Tg.twistedConjugated(source,s));
       const TwistedInvolution tw = inv_pool[k];
       int d = i==k ? 0 : W.length_change(s,source);
 
       // generate cross action neighbours if needed, and make links to them
-      for (KGBElt cur=first_of_tau[i]; cur<first_of_tau[i+1]; ++cur) // again
+      for (KGBElt cur=first_of_tau[i]; cur<first_of_tau[i+1]; ++cur)
       {
 	TitsElt x = elt_pool[cur]; // take a copy
-	Tg.basedTwistedConjugate(x,s);
+	Tc.basedTwistedConjugate(x,s);
 	fd.reduce(x);
 	KGBElt child = elt_hash.match(x);
 	if (child==info.size()) // then newborn
-	  add_element(l+d,tw); // create its |info| entry, setting length, tw
+	  add_element(); // create its |info| entry
 	data[s][cur].cross_image=child; // set link from |x| to child
 	if (d!=0)
 	  info[cur].status.set(s,gradings::Status::Complex);
 	else if (W.hasDescent(s,tw))
 	  info[cur].status.set(s,gradings::Status::Real);
-	else if (Tg.simple_grading(x,s))
+	else if (Tc.simple_grading(x,s))
 	  info[cur].status.set(s,gradings::Status::ImaginaryNoncompact);
 	else
 	  info[cur].status.set(s,gradings::Status::ImaginaryCompact);
-	info[cur].desc.set(s,W.hasDescent(s,tw));
+
+	info[cur].desc.set(s,W.hasDescent(s,tw)); // complex descent or real
 
 	if (status(s,cur)==gradings::Status::ImaginaryNoncompact) // do Cayley
 	{
@@ -881,13 +874,13 @@ subsys_KGB::subsys_KGB
 
 	  const TwistedInvolution tw = inv_pool[k]; // mask previous
 	  TitsElt x = elt_pool[cur];  // but do no modify their values
-	  Tg.Cayley_transform(x,s);
+	  Tc.Cayley_transform(x,s);
 	  if (fd.unseen(x.tw()))
-	    fd.add_class(tw,sub.involution(tw));
+	    fd.add_class(tw,sub.matrix(tw));
 	  fd.reduce(x);
 	  child = elt_hash.match(x);
 	  if (child==info.size()) // then newborn
-	    add_element(l+1,tw); // create its |info| entry, setting length, tw
+	    add_element(); // create its |info| entry, setting length, tw
 
 	  // make links
 	  data[s][cur].Cayley_image = child;
@@ -910,31 +903,31 @@ subsys_KGB::subsys_KGB
   in_parent.reserve(info.size());
   Cartan.reserve(info.size()); torus_part.reserve(info.size());
 
+  // convert twisted involutions to original form
   {
     const WeylGroup& pW= kgb.weylGroup(); // now work in parent Weyl group
-    const TitsGroup& TG = Tg.titsGroup(); // we need this several times
     const WeylElt w_base = pW.element(sub.base_twisted_in_parent());
 
-    for (KGBElt x=0; x<elt_pool.size(); ++x)
+    for (InvolutionNbr i=0; i<inv_pool.size(); ++i)
     {
       WeylElt w = w_base;
-      WeylWord ww = W.word(elt_pool[x].tw());
-      for (size_t i=ww.size(); i-->0; ) // laboriously compute parent involution
-	pW.leftMult(w,sub.reflection(ww[i]));
+      WeylWord ww = W.word(inv_pool[i]);
+      for (size_t j=ww.size(); j-->0; ) // laboriously compute parent involution
+	pW.leftMult(w,sub.reflection(ww[j]));
 
-      in_parent.push_back(kgb.lookup
-			  (TitsElt(TG,TG.left_torus_part(elt_pool[x]),w),
-			   TG));
-      Cartan.push_back(fd.cartanClass(elt_pool[x].tw()));
-      torus_part.push_back(TG.left_torus_part(elt_pool[x]));
+      inv_pool[i] = w; // overwrite by involution for parent group
+      for (KGBElt x=first_of_tau[i]; x<first_of_tau[i+1]; ++x)
+      {
+	torus_part.push_back(Tg.left_torus_part(elt_pool[x]));
+	Cartan.push_back(fd.cartanClass(elt_pool[x].tw()));
+	in_parent.push_back // find the |KGBElt| value in parent for |x|
+	  (kgb.lookup(TitsElt(Tg,torus_part.back(),w), // reconstruct with |w|
+		      Tg)); // |Tg| is needed again to extract torus parts...
+      }
     }
+    inv_hash.reconstruct();
   }
 } // |subsys_KGB::subsys_KGB|
-
-size_t subsys_KGB::Cartan_class(KGBElt x) const
-{
-  return Cartan[x];
-}
 
 std::ostream& subsys_KGB::print(std::ostream& strm, KGBElt x) const
 {
@@ -1022,8 +1015,8 @@ GlobalFiberData::GlobalFiberData
 
 
 GlobalFiberData::GlobalFiberData
- (const GlobalTitsGroup& Tg,
-  hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+  (const GlobalTitsGroup& Tg,
+   hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
   : hash_table(h)
   , info()
   , refl(Tg.semisimple_rank())
@@ -1039,83 +1032,87 @@ GlobalFiberData::GlobalFiberData
   }
 }
 
-// In this method there is a subtle distribution of roles: |sub| provides the
-// set of "simple" roots to handle, |sub.parent_datum()| is used to interpret
-// any |RootNbr| values, and |Tg| interprets any |TwistedInvolution|. It
-// should not be assumed that the generators of |Tg| are those of |sub|, nor
-// those of |sub.parent_datum()|: either (or none) could be the case.
-void GlobalFiberData::add_class(const SubSystem& sub,
-				const GlobalTitsGroup& Tg,
-				const TwistedInvolution& tw)
+GlobalFiberData::GlobalFiberData
+  (const SubSystem& sub,
+   hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+  : hash_table(h)
+  , info()
+  , refl(sub.rank())
 {
-  const RootDatum& pd = sub.parent_datum();
-  const TwistedWeylGroup& W = Tg;
+  PreRootDatum parent = sub.pre_root_datum();
+  size_t pr = parent.rank();
+  const WeightList&   root   = parent.roots();
+  const CoweightList& coroot = parent.coroots();
+  for (weyl::Generator s=0; s<refl.size(); ++s)
+  {
+    refl[s] =  CoweightInvolution(pr); // identity matrix
+    const Weight& alpha     = root[s];
+    const Coweight& alpha_v = coroot[s];
+    for (size_t i=0; i<pr; ++i)
+      for (size_t j=0; j<pr; ++j)
+	refl[s](i,j) -= alpha[i]*alpha_v[j];
+  }
+}
 
-  RootNbrList W_simple(W.rank());
-  for (weyl::Generator s=0; s<W.rank(); ++s)
-    W_simple[s]=pd.rootNbr(Tg.parent_simple_root(s));
+InvInfo::InvInfo(const SubSystem& subsys,
+		 hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+  : GlobalFiberData(subsys,h), sub(subsys), n_Cartans(0)
+{}
 
-  const size_t prev_inv = hash_table.size();
-  if (hash_table.match(tw)<prev_inv)
-    return; // all involutions present in hash table are fully catered for
+bool InvInfo::add_involution
+  (const TwistedInvolution& tw, const GlobalTitsGroup& Tg)
+{
+  assert(info.size()==hash_table.size());
+  if (hash_table.match(tw)<info.size())
+    return false; // involution is already tabulated;
 
-  std::vector<std::pair<size_t,weyl::Generator> > history; // record ancestors
-  history.reserve(0x100); // avoid some initial reallocations for efficiency
-
-  WeightInvolution A = Tg.involution_matrix(tw); // parent side
-  InvolutionData id = sub.involution_data(A); // roots of |sub| as parent roots
-
-  for (size_t i=0; i<A.numRows(); ++i)
-    A(i,i) -= 1; // now $A=\theta-1$, a matrix whose kernel is $(X^*)^\theta$
-
-  RootNbrSet imaginary=id.real_roots(); // imaginary for |Tg|
+  const RootDatum& pd = sub.parent_datum(); // needed for 2rho_imaginary
+  WeightInvolution A = Tg.involution_matrix(tw); // generate matrix $\theta$
+  InvolutionData id = sub.involution_data(A); // roots of |sub| only
+  RootNbrSet imaginary=id.real_roots(); // imaginary from |sub| side
   RootNbrList simple_imaginary=id.real_basis();
   RootNbrList simple_real=id.imaginary_basis();
 
-  // saturate by conjugation before reserving space and filling |info|
-  for (size_t i=prev_inv; i<hash_table.size(); ++i) // hash table grows
-  {
-    size_t last = hash_table.size()-1; // |hash_table| contains at least |tw|
+  // subtract identity from |A|, and row-saturate it
+  for (size_t i=0; i<A.numRows(); ++i)
+    A(i,i) -= 1; // now $A=\theta-1$, a matrix whose kernel is $(X^*)^\theta$
+  lattice::row_saturate(A).swap(A);
 
-    for (weyl::Generator s=0; s<W.rank(); ++s)
-    {
-      TwistedInvolution ti = W.twistedConjugated(hash_table[i],s);
-      size_t k = hash_table.match(ti);
-      if (k>last) // a new twisted involution
-      {
-	history.push_back(std::make_pair(i,s));
-	last=k;
-      }
-    } // |for(s)|
-  } // |for(i<hash_table.size())|
-
-    // reserve table space for new Cartan class
-  info.reserve(hash_table.size());
-
-  // create initial element
-  info.push_back(inv_info(info.empty() ? 0 : info.back().Cartan+1,
-			  lattice::row_saturate(A),
+  info.push_back(inv_info(n_Cartans++,
+			  A,
 			  pd.twoRho(imaginary), // |pd| is dual w.r.t. |Tg|
 			  simple_imaginary, // and |id| nomenclature for |Tg|
 			  simple_real));
 
-  // do remaining elements using history
-  for (size_t k=prev_inv + 1; k<hash_table.size(); ++k)
-  {
-    size_t i=history[k-(prev_inv + 1)].first;
-    assert(i<k); // this should refer to earlier element
-    const inv_info& cur = info[i];
-    weyl::Generator s=history[k-(prev_inv + 1)].second;
-    info.push_back(inv_info
+  assert(info.size()==hash_table.size()); // reestablished size match
+  return true;
+}
+
+bool InvInfo::add_cross_neighbor
+  (const TwistedInvolution& tw,
+   unsigned int old_inv,
+   weyl::Generator s)
+{
+  assert(info.size()==hash_table.size());
+  if (hash_table.match(tw)<info.size())
+    return false; // involution is already tabulated;
+
+  const RootDatum& pd = sub.parent_datum(); // needed for 2rho_imaginary
+  const Permutation& sigma = pd.root_permutation(sub.parent_nr_simple(s));
+
+  assert(old_inv<hash_table.size()); // should refer to known element
+  const inv_info& cur = info[old_inv];
+  info.push_back(inv_info
      (cur.Cartan,   // same Cartan class
       cur.proj*refl[s], // apply $refl[s]^{-1}$ to old kernel
       refl[s]*cur.check_2rho_imag,
-      pd.root_permutation(W_simple[s]).renumbering(cur.simple_imag),
-      pd.root_permutation(W_simple[s]).renumbering(cur.simple_real)
+      sigma.renumbering(cur.simple_imag),
+      sigma.renumbering(cur.simple_real)
       ));
-  }
+
   assert(info.size()==hash_table.size());
-} // |GlobalFiberData::add_class|
+  return true;
+}
 
 
 //  this demonstrates what the |proj| matrices can be used for
@@ -1161,6 +1158,9 @@ GlobalTitsElement GlobalFiberData::imaginary_cross
     a.torus_part() += tits::TorusPart(dual_rd.root(alpha));
   return a;
 }
+
+
+
 /*    II b. |FiberData|  */
 
 
@@ -1288,7 +1288,7 @@ void FiberData::complete_class(unsigned int initial)
 
 void FiberData::reduce(TitsElt& a) const
 {
-  Tits.left_torus_reduce(a,mod_space(a));
+  a.reduce(mod_space(a));
 }
 
 

@@ -26,6 +26,7 @@ TitsGroup and TitsElt.
 #include "prerootdata.h" // contained in |GlobalTitsGrooup|
 #include "weyl.h"      // contained in |TitsElt|
 
+#include "y_values.h"
 
 #include "cartanclass.h"
 
@@ -36,9 +37,6 @@ namespace atlas {
 namespace tits {
 
 /******** function declarations *********************************************/
-
-  inline TorusElement exp_pi(const RatWeight r);
-  inline TorusElement exp_2pi(const RatWeight r);
 
   // 2-subgroup by which each |TorusPart| at involution |inv| will be reduced
   SmallSubspace fiber_denom(const WeightInvolution& inv);
@@ -61,67 +59,6 @@ namespace tits {
   elements of order 2; hence H(2) is represented by (Z/2Z)^rank
   */
   typedef SmallBitVector TorusPart;
-
-
-
-/* The following classes are newer than |TitsElement|, |TitsGroup| and
-   |BasedTitsGroup| below, and less efficient, but provide a framework in
-   which te sets modelled by the latter classes can be fitted.
-*/
-
-/* An element of finite order in $H$. Externally this is like a rational vector
-   modulo integers in the coordinates. Internally we store twice the numerator
-   of the rational vector, which facilitates adding halves to its coordinates.
-*/
-class TorusElement
-{
-  RatWeight repr; // represents $\exp(\pi i repr)$, no factor 2!
-
-  TorusElement(const RatWeight r,tags::UnnormalizedTag)
-   : repr(r) {} // raw constructor, like exp(pi i r), but no modular reduction
- public:
-  explicit TorusElement(size_t rank) : repr(rank) {} // identity torus element
-
-  // $\exp(\pi\ii r )$ or $\exp(2\pi\ii r )$
-  TorusElement(const RatWeight& r,bool two);
-
-  // accessors
-
-  // provide access to value, but convert to "mod Z^rank" not "mod 2Z^rank"
-  RatWeight log_pi(bool normalize) const;
-  RatWeight log_2pi() const;
-
-  // more often it will be practical to have acces to that "mod 2Z^rank" form
-  const RatWeight& as_Qmod2Z() const { return repr; }
-
-  bool operator== (const TorusElement& a) const { return repr==a.repr; }
-  bool operator!= (const TorusElement& a) const { return repr!=a.repr; }
-  bool operator<  (const TorusElement& a) const { return repr<a.repr; }
-
-  TorusElement operator +(const TorusElement& t) const;
-  TorusElement operator -(const TorusElement& t) const;
-
-  // this method is to be used only at weights |alpha| taking value +1 or -1
-  bool negative_at(const Coweight& alpha) const
-    { return repr.scalarProduct(alpha)%2!=0; }
-
-  // evaluation giving rational number modulo 2 (|negative_at| iff equals 1)
-  Rational evaluate_at(const Coweight& alpha) const;
-
-  // manipulators
-
-  TorusElement& operator+=(TorusPart v); // arg by value since it is small
-
-  // the following method assumes |prd| is on dual side with respect to torus
-  void simple_reflect(const PreRootDatum& prd, weyl::Generator s)
-  { prd.simpleReflect(repr.numerator(),s); } // numerator is weight for |prd|
-}; // |class TorusElement|
-
-inline TorusElement exp_pi(const RatWeight r)
-{ return TorusElement(r,false); }
-inline TorusElement exp_2pi(const RatWeight r)
-{ return TorusElement(r,true); }
-
 
 
 
@@ -160,6 +97,8 @@ class GlobalTitsElement
   const TwistedInvolution& tw() const { return w; }
 
 // a method defined without help of |GlobalTitsGroup| (and which ignores |w|)
+// requires simple-imaginary |alpha| that is integral on |t|; however unless
+// all roots are integral on |t|, these conditions might be contradictory
   GlobalTitsElement simple_imaginary_cross
   (const RootDatum& dual_rd, // dual for pragmatic reasons
    RootNbr alpha) const; // any simple-imaginary root
@@ -195,23 +134,32 @@ class GlobalTitsElement
    efficiently handled by tabulation than by on-the-fly computation (cf.
    |kgb::GlobalFiberData|).
 
-   This class has two applications: the main one is to be able to manipulate a
-   given |GlobalTitsElement|, but for testing purposes an initial application
-   was to build a |GlobalTitsGroup| first (from an inner class), and then to
-   generate "all" valid elements for it (command 'X'). For the latter purpose
-   the |square_class_gen| and associated method are included, which permits
+   This class has two applications: the main one is just to be able to
+   manipulate a given |GlobalTitsElement|, which in practice is used for |y|
+   values for the construction of possibly non-integral blocks. However, for
+   testing purposes an initial application was to build a |GlobalTitsGroup| as
+   a substitute for the |TitsGroup| and |TitsCoset| support classes handling
+   |x| values. It is then attached to a whole inner class rather than to a
+   specific real form (as |TitsCoset| is) and as a consequence it can generate
+   "all" valid elements for it (the command 'X'). For the latter purpose the
+   |square_class_gen| and associated method are included, which permits
    listing a set of initial elements from which others can be deduced. For the
    main application however this field can be left an empty list, so as not to
    waste any time computing it during construction. This dichotomy should of
    course be reimplemented through a derived class.
 
-   The main use involves manipulating |y| values for the construction of
-   possibly non-integral blocks, in which case the perspective is from that
-   side; for instance the matrix |delta_tr|, called transposed, will actually
-   be one that acts on character lattice $X^*$. However, in the initial use
-   this class manipulates |x| values, for comparison with the results of the
-   KGB construction; the perspective is then "direct". Terminology such as
-   "dual side", "imaginary roots" is relative to the current perspective.
+   Another heritage of this double usage is an ambiguity in terminology: in
+   the main use the |GlobalTitsElement|s are |y| values, in which case the
+   perspective is from that side; for instance the matrix |delta_tr|, called
+   transposed, will actually be one that acts on character lattice $X^*$, and
+   defines the most split Cartan. However, in the initial use they are |x|
+   values (the output of 'X' "contains" the KGB structures for any real form).
+   Terminology in comments is relative to the side of |GlobalTitsElement|, so
+   saying the |simple| field below is on the "dual side" means that in
+   handling |y| values, it is (a subdatum viewed from the side of) the
+   original root datum; also "imaginary roots" are then real coroots for that
+   original datum. The resulting ambiguity only slightly affects method names:
+   for instance (imaginary) |compact| means (real) "nonparity" for |y|-use.
  */
 class GlobalTitsGroup : public TwistedWeylGroup
 {
@@ -236,8 +184,8 @@ class GlobalTitsGroup : public TwistedWeylGroup
 
   //!\brief constructor from subdatum (dual side) + involution information
   GlobalTitsGroup(const SubSystem& sub,
-  		  const WeightInvolution& theta,
-		  WeylWord& ww); // output: expesses |-theta^t| for |sub|
+  		  const WeightInvolution& theta, // on opposite side from |sub|
+		  WeylWord& ww); // output: expresses |-theta^t| for |sub|
 
   // accessors
   size_t semisimple_rank() const { return alpha_v.size(); }
@@ -254,7 +202,8 @@ class GlobalTitsGroup : public TwistedWeylGroup
   Coweight parent_simple_coroot(weyl::Generator s) const
   { return simple.coroots()[s]; }
 
-  //!\brief Reflection of |TorusElement|s defined by a twisted involution
+  // Reflection of |TorusElement|s defined by a twisted involution.
+  // This matrix is negated-transposed w.r.t. |tw| (so |-delta_tr| if $tw=e$)
   WeightInvolution involution_matrix(const WeylElt& tw) const;
 
   using TwistedWeylGroup::twisted; // overloaded in this class
@@ -268,6 +217,12 @@ class GlobalTitsGroup : public TwistedWeylGroup
   { return square_class_gen; }
 
 
+// methods that operate on an isolated |TorusElement|
+
+  void complex_cross_act(weyl::Generator s,TorusElement& t) const
+  { t.simple_reflect(simple,s); }  // OK since |simple| on dual side for |t|
+  void imaginary_cross_act(weyl::Generator s,TorusElement& t) const;
+
 // methods that only access some |GlobalTitsElement|
 
   bool is_valid(const GlobalTitsElement& a) const; // whether strong invovlution
@@ -276,8 +231,11 @@ class GlobalTitsGroup : public TwistedWeylGroup
 		const SubSystem& sub) const; // central in subgroup
 
   // determine status of simple root, if assumed imaginary
+  bool compact(weyl::Generator s, const TorusElement& t) const
+  { return t.negative_at(simple.coroots()[s]); }
   bool compact(weyl::Generator s, const GlobalTitsElement& a) const
-  { return a.torus_part().negative_at(simple.coroots()[s]); }
+  { return compact(s,a.torus_part()); }
+
   // compute Cayley transform
   GlobalTitsElement Cayley(weyl::Generator s, GlobalTitsElement a) const
   { leftMult(a.w,s); return a; }
@@ -307,14 +265,23 @@ class GlobalTitsGroup : public TwistedWeylGroup
   int cross_act(GlobalTitsElement& a,const WeylWord& w) const;
   GlobalTitsElement cross(const WeylWord& w, GlobalTitsElement a) const
   { cross_act(w,a); return a; }
+  GlobalTitsElement cross(GlobalTitsElement a, const WeylWord& w) const
+  { cross_act(a,w); return a; }
 
   void add(TorusPart tp,GlobalTitsElement& a) const // |tp| by value: small
   { a.t += tp; }
 
-  // add |rw| to |a.t|
-  void add(const RatWeight& rw,GlobalTitsElement& a) const;
+  // add |rw| to |t|
+  void add(const RatWeight& rw,TorusElement& t) const
+  { t += y_values::exp_2pi(rw); }
 
-  // modify |a| to an inverse Cayley image by (real simple root) $\alpha_s$
+  void add(const RatWeight& rw,GlobalTitsElement& a) const
+  // the following would be necessary to get a true right-mulitplication
+  // involution_matrix(a.tw()).apply_to(rw.numerator()); // pull |rw| across
+  { add(rw,a.t); }
+
+  // modify |t| or |a| to an inverse Cayley image by (real simple root) $s$
+  void do_inverse_Cayley(weyl::Generator s,TorusElement& t) const;
   void do_inverse_Cayley(weyl::Generator s,GlobalTitsElement& a) const;
 
  private: // this exists for pragmatic reasons only; no reason to export it
@@ -465,6 +432,13 @@ reduced decomposition.
   { // test torus part first, which is easier
     return d_t != a.d_t ? d_t < a.d_t : d_w < a.d_w;
   }
+
+// manipulators
+
+  // in |reduce|, |V| should be modulo 2 reduction of image of $\theta-1$; as
+  // this is $\theta$-stable, reducing  left or right torus part is the same
+  TitsElt& reduce(const SmallSubspace& V)
+  { d_t=V.mod_image(d_t); return *this; }
 
 /* exceptionally we expose the raw torus part to derived classes; this should
    only be used for non-mathematical purposes like computing a hash code */
@@ -682,14 +656,6 @@ is done in the KGB construction, it induces an involution on the quotient set.
   void inverseTwistedConjugate(TitsElt& a, weyl::Generator s) const
   { sigma_inv_mult(s,a); mult_sigma(a,twisted(s)); }
 
-  void left_torus_reduce
-    (TitsElt& a, const SmallSubspace& V) const
-  { a.d_t=V.mod_image(a.d_t); }
-
-  void right_torus_reduce
-    (TitsElt& a, const SmallSubspace& V) const
-  { a=TitsElt(*this,a.w(),V.mod_image(right_torus_part(a))); }
-
 // manipulators (none)
 
 
@@ -810,16 +776,7 @@ class TitsCoset
   // inverse Cayley transform for real simple roots
   // this requires knowing the subspace by which torus part has been reduced
   void inverse_Cayley_transform(TitsElt& a, size_t s,
-				const SmallSubspace& mod_space)
-    const;
-
-  void left_torus_reduce
-    (TitsElt& a, const SmallSubspace& V) const
-  { titsGroup().left_torus_reduce(a,V); }
-
-  void right_torus_reduce
-    (TitsElt& a, const SmallSubspace& V) const
-  { titsGroup().right_torus_reduce(a,V); }
+				const SmallSubspace& mod_space) const;
 
   // conjugate Tits group element by $\delta_1$
   TitsElt twisted(const TitsElt& a) const;

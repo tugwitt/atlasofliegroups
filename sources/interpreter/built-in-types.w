@@ -123,12 +123,12 @@ private:
 typedef std::auto_ptr<Lie_type_value> Lie_type_ptr;
 typedef std::tr1::shared_ptr<Lie_type_value> shared_Lie_type;
 
-@ The type |LieType| is publicly derived from
-|std::vector<SimpleLieType>|, and in its turn |SimpleLieType| is publicly
-derived from |std::pair<char,size_t>|. Therefore these types could take
-arbitrary values, not necessarily meaningful ones. To remedy this we make the
-method |add_simple_factor|, which is the only proposed way to build up Lie
-types, check for the validity.
+@ The type |LieType| is publicly derived from |std::vector<SimpleLieType>|,
+and in its turn the type |SimpleLieType| is publicly derived from
+|std::pair<char,size_t>|. Therefore these types could take arbitrary values,
+not necessarily meaningful ones. To remedy this we make the method
+|add_simple_factor|, which is the only proposed way to build up Lie types,
+check for the validity.
 
 Since the tests defined in \.{io/interactive\_lietype.cpp} used in the
 current interface for the Atlas software are clumsy to use, we perform
@@ -261,7 +261,7 @@ construction would most likely crash.
 @< Local function definitions @>=
 void type_of_Cartan_matrix_wrapper (expression_base::level l)
 { shared_matrix m=get<matrix_value>();
-  permutations::Permutation pi;
+  Permutation pi;
   LieType lt=dynkin::Lie_type(m->val,true,true,pi);
   if (l==expression_base::no_value)
     return;
@@ -403,9 +403,7 @@ kind by $d/\gcd(d,\lambda_i)$ and transpose the result.
 
 @< Local function definitions @>=
 LatticeMatrix @|
-annihilator_modulo
-(const LatticeMatrix& M,
- LatticeCoeff denominator)
+annihilator_modulo(const LatticeMatrix& M, LatticeCoeff denominator)
 
 { int_Matrix row,col;
   CoeffList lambda = matreduc::diagonalise(M,row,col);
@@ -772,7 +770,7 @@ void raw_root_datum_wrapper(expression_base::level l)
   }
 
   PreRootDatum prd(s,c,rank);
-  try @/{@; permutations::Permutation dummy;
+  try @/{@; Permutation dummy;
     dynkin::Lie_type(prd.Cartan_matrix(),true,true,dummy);
   }
   catch (std::runtime_error& e)
@@ -1340,7 +1338,7 @@ lietype::Layout check_involution
  throw (std::bad_alloc, std::runtime_error)
 { size_t r=rd.rank(),s=rd.semisimpleRank();
   @< Check that |M| is an $r\times{r}$ matrix defining an involution @>
-@/permutations::Permutation p(s);
+@/Permutation p(s);
   @< Set |ww| to the Weyl group element needed to the left of |M| to map
   positive roots to positive roots, and |p| to the permutation of the simple
   roots so obtained, or throw a |runtime_error| if |M| is not an automorphism
@@ -1348,7 +1346,7 @@ lietype::Layout check_involution
 @/lietype::Layout result;
 @/LieType& type=result.d_type;
   InnerClassType& inner_class=result.d_inner;
-  permutations::Permutation& pi=result.d_perm;
+  Permutation& pi=result.d_perm;
   @< Compute the Lie type |type|, the inner class |inner_class|, and the
      permutation |pi| of the simple roots with respect to standard order for
      |type| @>
@@ -1689,34 +1687,44 @@ void inner_class_value::print(std::ostream& out) const
 }
 
 @ Our wrapper function builds a complex reductive group with an involution,
-testing its validity. Another returns a second value that indicates the
-twisted involution whose involution matrix in the inner class is the one given
-as argument
+testing its validity. The Weyl word |ww| that was needed in the test to make
+the involution into one of the based root datum must be applied to the matrix,
+since the test does not actually modify its matrix argument. Then the root
+datum is passed to a |ComplexReductiveGroup| constructor that the library
+provides specifically for this purpose, and which makes a copy of the root
+datum; the \.{atlas} program instead uses a constructor using a |PreRootDatum|
+that constructs the |RootDatum| directly into the |ComplexReductiveGroup|, but
+using that constructor here would be cumbersome and even less efficient then
+copying the existing root datum. Another wrapper |twisted_involution_wrapper|
+is similar, but also returns a second value, which is the twisted involution
+corresponding in the inner class to the given involution matrix.
 
 @< Local function def...@>=
 void fix_involution_wrapper(expression_base::level l)
-{ shared_matrix M(get<matrix_value>());
+{ LatticeMatrix M(get<matrix_value>()->val); // safe use of temporary
   shared_root_datum rd(get<root_datum_value>());
   WeylWord ww;
-  lietype::Layout lo = check_involution(M->val,rd->val,ww);
+  lietype::Layout lo = check_involution(M,rd->val,ww);
   if (l==expression_base::no_value)
     return;
 @)
-  std::auto_ptr<ComplexReductiveGroup>@|
-    G(new ComplexReductiveGroup(rd->val,M->val));
+  for (unsigned int i=ww.size(); i-->0;)
+    rd->val.simple_reflect(ww[i],M);
+  std::auto_ptr<ComplexReductiveGroup> G(new ComplexReductiveGroup(rd->val,M));
   push_value(new inner_class_value(G,lo));
 }
 
 void twisted_involution_wrapper(expression_base::level l)
-{ shared_matrix M(get<matrix_value>());
+{ LatticeMatrix M(get<matrix_value>()->val);
   shared_root_datum rd(get<root_datum_value>());
   WeylWord ww;
-  lietype::Layout lo = check_involution(M->val,rd->val,ww);
+  lietype::Layout lo = check_involution(M,rd->val,ww);
   if (l==expression_base::no_value)
     return;
 @)
-  std::auto_ptr<ComplexReductiveGroup>@|
-    G(new ComplexReductiveGroup(rd->val,M->val));
+  for (unsigned int i=ww.size(); i-->0;)
+    rd->val.simple_reflect(ww[i],M);
+  std::auto_ptr<ComplexReductiveGroup> G(new ComplexReductiveGroup(rd->val,M));
   push_value(new inner_class_value(G,lo));
   push_value(new vector_value(std::vector<int>(ww.begin(),ww.end())));
   if (l==expression_base::single_value)
@@ -2506,7 +2514,7 @@ void fiber_part_wrapper(expression_base::level l)
   if (l==expression_base::no_value)
     return;
 @)
-  const partition::Partition& pi = cc->val.fiber().weakReal();
+  const Partition& pi = cc->val.fiber().weakReal();
   const RealFormNbrList rf_nr=
      cc->parent.val.realFormLabels(cc->number);
      // translate part number of |pi| to real form
@@ -2541,7 +2549,7 @@ void print_gradings_wrapper(expression_base::level l)
     ("Cartan class not defined for this real form");
 @.Cartan class not defined...@>
 @)
-  const partition::Partition& pi = cc->val.fiber().weakReal();
+  const Partition& pi = cc->val.fiber().weakReal();
   const RealFormNbrList rf_nr=
      cc->parent.val.realFormLabels(cc->number);
      // translate part number of |pi| to real form
@@ -2550,7 +2558,7 @@ void print_gradings_wrapper(expression_base::level l)
   // simple imaginary roots
 
   int_Matrix cm;
-  permutations::Permutation sigma;
+  Permutation sigma;
 @/@< Compute the Cartan matrix |cm| of the root subsystem |si|, and the
      permutation |sigma| giving the Bourbaki numbering of its simple roots @>
 
@@ -3135,8 +3143,9 @@ void print_W_graph_wrapper(expression_base::level l)
 }
 
 @ The function |test_representation| serves to experiment with the input of
-general representation parameters and they computation of the corresponding
-pair $(x,y)$.
+general representation parameters and the computation of the corresponding
+pair $(x,y)$. The code below should be modified so as to use only the integral
+system defined by the infinitesimal character~$\gamma$.
 
 @h "repr.h"
 

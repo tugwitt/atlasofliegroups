@@ -97,10 +97,10 @@ std::ostream& printCartanClass(std::ostream& strm, size_t cn,
 std::ostream& printFiber(std::ostream& strm, const Fiber& f,
 			 const RealFormNbrList& rfl)
 {
-  const partition::Partition& pi = f.weakReal();
+  const Partition& pi = f.weakReal();
   unsigned long c = 0;
 
-  for (partition::PartitionIterator i(pi); i(); ++i,++c)
+  for (Partition::iterator i(pi); i(); ++i,++c)
   {
     std::ostringstream os;
     os << "real form #";
@@ -131,16 +131,16 @@ std::ostream& printGradings(std::ostream& strm, const Fiber& f,
   const RootNbrList& si = f.simpleImaginary();
   int_Matrix cm = rs.cartanMatrix(si);
   dynkin::DynkinDiagram d(cm);
-  permutations::Permutation a = dynkin::bourbaki(d);
+  Permutation a = dynkin::bourbaki(d);
   a.inv_conjugate(cm);
 
   strm << "cartan matrix of imaginary root system is:" << std::endl;
   prettyprint::printMatrix(strm,cm);
 
-  const partition::Partition& pi = f.weakReal();
+  const Partition& pi = f.weakReal();
   unsigned long c = 0;
 
-  for (partition::PartitionIterator i(pi); i(); ++i) {
+  for (Partition::iterator i(pi); i(); ++i) {
 
     std::ostringstream os;
     os << "real form #";
