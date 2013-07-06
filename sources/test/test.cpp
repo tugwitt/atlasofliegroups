@@ -1641,14 +1641,14 @@ void hblock_f()
     int tab = 2;
 
     for (size_t y = 0; y < klc_pointer->size(); ++y)
-    {
+      if (flags[y])
+      {
+	f << std::setw(width) << y << ": ";
+	bool first = true;
 
-      f << std::setw(width) << y << ": ";
-      bool first = true;
-
-      if (flags[y]) {
-	for (size_t x = 0; x <= y; ++x) {
-	  if (flags[x]) {
+	for (size_t x = 0; x <= y; ++x)
+	  if (flags[x])
+	  {
 	    const kl::KLPol& pol = klc_pointer->klPol(x,y);
 	    if (pol.isZero())
 	      continue;
@@ -1666,14 +1666,9 @@ void hblock_f()
 	    f << "" << std::endl;
 	    ++count;
 	  }
-	}
 
 	f << "" << std::endl;
       }
-      else {
-	f << std::setw(width) << y << ": 1" << std::endl << std::endl;
-      }
-    }
 
     /*
       kl::KLContext klc(block);
