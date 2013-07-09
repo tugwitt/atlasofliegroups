@@ -476,11 +476,6 @@ void Block::compute_supports()
       d_involutionSupport[z].set(s);
     }
   } // |for(z)|
-
-
-#ifdef VERBOSE
-  std::cerr << "done" << std::endl;
-#endif
 } // |Block::compute_supports|
 
 Block::Block(const Block& b)
@@ -789,6 +784,7 @@ gamma_block::gamma_block(RealReductiveGroup& GR,
 	  if (new_cross)
 	    y_rep.push_back(t);
 	  assert(y_hash.size()== (new_cross ? old_size+j+1 : old_size));
+	  ndebug_use(old_size);
 	}
       } // compute values |cross_ys|
 
@@ -1322,6 +1318,7 @@ non_integral_block::non_integral_block
 	  aux.cross_act(z,s);
 	  cross_ys.push_back(y_hash.match(aux.pack_y(z)));
 	  assert(y_hash.size()== (new_cross ? old_size+j+1 : old_size));
+	  ndebug_use(old_size);
 	}
       } // compute values |cross_ys|
 
