@@ -19,6 +19,7 @@
 #include "mainmode.h"
 #include "realmode.h"
 #include "blockmode.h"
+#include "reprmode.h"
 #include "error.h"
 #include "input.h"
 #include "version.h"
@@ -45,9 +46,10 @@ int main(int argc, char* argv[])
     emptymode::emptyMode().add_descendant(mainmode::mainMode());
     mainmode::mainMode().add_descendant(realmode::realMode());
     realmode::realMode().add_descendant(blockmode::blockMode());
+    realmode::realMode().add_descendant(reprmode::reprMode());
 
     input::initReadLine();
-    commands::run(emptymode::emptyMode());
+    emptymode::emptyMode().run();
 
     std::exit(0);
   }

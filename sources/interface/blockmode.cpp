@@ -23,6 +23,9 @@
 #include "ioutils.h"
 #include "basic_io.h"
 #include "filekl.h"
+
+#include "dynkin.h"
+#include "lietype.h"
 #include "realredgp.h"
 #include "realredgp_io.h"
 #include "kgb.h"
@@ -75,6 +78,7 @@ namespace {
 
   void type_f();
   void realform_f();
+  void dualrealform_f();
 
   // local variables
 
@@ -100,13 +104,14 @@ commands::CommandMode& blockMode()
   if (block_mode.empty()) // true upon first call
   {
     // add the commands from the real mode
-    commands::addCommands(block_mode,realmode::realMode());
+    block_mode.addCommands(realmode::realMode());
 
     // add commands for this mode
     // the "type" command should be redefined here because it needs to exit
     // the block and real modes
     block_mode.add("type",type_f); // override
     block_mode.add("realform",realform_f); // this one too
+    block_mode.add("dualrealform",dualrealform_f); // this one too
     block_mode.add("smallkgb",small_kgb_f);
     block_mode.add("smalldualkgb",small_dual_kgb_f);
     block_mode.add("block",block_f);
@@ -190,8 +195,8 @@ wgraph::WGraph& currentWGraph()
 namespace {
 
 /*
-  Synopsis: attempts to set a real form interactively. In case of failure,
-  throws an InputError and returns. All Cartan classes are generated.
+  Synopsis: attempts to set a real form and dual real form interactively.
+  In case of failure, throws an InputError and returns.
 */
 void block_mode_entry() throw(commands::EntryError)
 {
@@ -219,6 +224,36 @@ void block_mode_entry() throw(commands::EntryError)
     throw commands::EntryError();
   }
 }
+
+/*
+  Reset the dual real form, effectively re-entering block mode. If the choice
+  of a new dual real form fails, the current dual real form remains in force.
+*/
+void dualrealform_f()
+{
+  try
+  {
+    RealReductiveGroup& G_R = realmode::currentRealGroup();
+    ComplexReductiveGroup& G_C = G_R.complexGroup();
+    const complexredgp_io::Interface& G_I = mainmode::currentComplexInterface();
+
+    // get dual real form
+    RealFormNbr drf;
+
+    interactive::getInteractive
+      (drf,G_I,G_C.dualRealFormLabels(G_R.mostSplit()),tags::DualTag());
+
+    // we can call the swap method for rvalues, but not with and rvalue arg
+    RealReductiveGroup(*dual_G_C_pointer,drf).swap(*dual_G_R_pointer);
+
+    delete block_pointer; block_pointer=NULL;
+    delete WGr_pointer; WGr_pointer=NULL;
+  }
+  catch (error::InputError& e) {
+    e("dual real form not changed");
+  }
+}
+
 
 
 /*
@@ -269,8 +304,8 @@ void type_f()
 
 
 /*
-  Synopsis: resets the type, effectively re-entering the real mode. If the
-  construction of the new type fails, the current block remains in force.
+  Reset the real form, effectively re-entering the real mode. If the choice
+  of a new real form fails, the current real form remains in force.
 */
 void realform_f()
 {
@@ -278,10 +313,10 @@ void realform_f()
   { // we can call the swap method for rvalues, but not with and rvalue arg
     interactive::getRealGroup(mainmode::currentComplexInterface()).swap
       (realmode::currentRealGroup());
-
     commands::exitMode(); // upon success pop block mode, destroying dual group
   }
-  catch (error::InputError& e) {
+  catch (error::InputError& e)
+  {
     e("real form not changed");
   }
 }

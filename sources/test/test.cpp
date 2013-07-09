@@ -13,8 +13,8 @@
 
 #include <cassert>
 #include <iostream>
-#include <fstream>
 #include <iomanip>
+#include <fstream>
 #include <map>
 
 #include "atlas_types.h" // here to preempt double inclusion of _fwd files
@@ -52,6 +52,7 @@
 #include "mainmode.h"
 #include "realmode.h"
 #include "blockmode.h"
+#include "reprmode.h"
 
 #include "testrun.h"
 #include "kltest.h"
@@ -90,13 +91,9 @@ namespace {
   void exam_f();
 
   void X_f();
-  void iblock_f();
-  void nblock_f();
-  void hblock_f();
-  void deform_f();
-  void partial_block_f();
   void embedding_f();
 
+  void hblock_f();
   void hkllist_f();
   void hklbasis_f();
   void hkltest_f();
@@ -156,7 +153,8 @@ namespace {
   in every template instance of |addTestCommands| and of |addTestHelp| below.
   Set this constant according to the requirements of the |test_f| function.
 */
-  enum TestMode {EmptyMode, MainMode, RealMode, BlockMode, numTestMode};
+  enum TestMode {EmptyMode, MainMode, RealMode, BlockMode, ReprMode,
+		 numTestMode};
   const TestMode testMode = RealMode; // currently does subsystem KGB test
 
   // utilities
@@ -237,10 +235,6 @@ void addTestCommands<realmode::RealmodeTag>
   mode.add("qbranch",qbranch_f);
   mode.add("srtest",srtest_f);
   mode.add("examine",exam_f);
-  mode.add("iblock",iblock_f);
-  mode.add("nblock",nblock_f);
-  mode.add("deform",deform_f);
-  mode.add("partial_block",partial_block_f);
   mode.add("embedding",embedding_f);
 }
 
@@ -258,6 +252,18 @@ void addTestCommands<blockmode::BlockmodeTag>
   mode.add("hklbasis",hklbasis_f);
   mode.add("hkltest",hkltest_f);
 }
+
+// Add to the repr mode the test commands that require that mode.
+template<>
+void addTestCommands<reprmode::ReprmodeTag>
+  (commands::CommandMode& mode, reprmode::ReprmodeTag)
+{
+  if (testMode == ReprMode)
+    mode.add("test",test_f);
+
+  // add additional commands here :
+}
+
 
 
 // Add to the help mode the test commands that require that mode.
@@ -1074,213 +1080,6 @@ void X_f()
   kgb_io::print_X(f,kgb);
 }
 
-void iblock_f()
-{
-  RealReductiveGroup& GR = realmode::currentRealGroup();
-  ComplexReductiveGroup& G = GR.complexGroup();
-  const RootDatum& rd = G.rootDatum();
-
-  Weight lambda_rho =
-    interactive::get_weight(interactive::sr_input(),
-			    "Give lambda-rho: ",
-			    G.rank());
-
-  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
-
-
-  RatWeight nu=
-    interactive::get_ratweight
-    (interactive::sr_input(),"rational parameter nu: ",rd.rank());
-
-  const KGB& kgb = GR.kgb();
-  unsigned long x=interactive::get_bounded_int
-    (interactive::common_input(),"KGB element: ",kgb.size());
-
-  WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
-
-  nu = RatWeight // make |nu| fixed by $-\theta$
-    (nu.numerator()- theta*nu.numerator(),2*nu.denominator());
-
-  RatWeight gamma = nu + RatWeight
-    (lambda.numerator()+theta*lambda.numerator(),2*lambda.denominator());
-
-  ioutils::OutputFile f;
-  f << "Infinitesimal character is " << gamma << std::endl;
-
-  SubSystemWithGroup sub = SubSystemWithGroup::integral(rd,gamma);
-
-  WeylWord ww;
-  sub.twist(theta,ww); // resulting |weyl::Twist| is unused, but |ww| is set
-
-  Permutation pi;
-
-  f << "Subsystem on dual side is ";
-  if (sub.rank()==0)
-    f << "empty.\n";
-  else
-  {
-    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-      << ", with roots ";
-    for (weyl::Generator s=0; s<sub.rank(); ++s)
-      f << sub.parent_nr_simple(pi[s]) << (s<sub.rank()-1 ? "," : ".\n");
-  }
-  f << "Twisted involution in subsystem: " << ww << ".\n";
-
-  BlockElt z;
-  blocks::gamma_block block(GR,sub,x,lambda,gamma,z);
-
-  f << "Given parameters define element " << z
-    << " of the following block:" << std::endl;
-
-  block.print_to(f,false);
-} // |iblock_f|
-
-void nblock_f()
-{
-  RealReductiveGroup& GR = realmode::currentRealGroup();
-
-  Weight lambda_rho;
-  RatWeight gamma(0);
-  KGBElt x;
-
-  SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
-
-  ioutils::OutputFile f;
-
-  Permutation pi;
-
-  f << "Subsystem on dual side is ";
-  if (sub.rank()==0)
-    f << "empty.\n";
-  else
-  {
-    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-      << ", with roots ";
-    for (weyl::Generator s=0; s<sub.rank(); ++s)
-      f << sub.parent_nr_simple(pi[s])
-	<< (s<sub.rank()-1 ? "," : ".\n");
-  }
-
-  Rep_context rc(GR);
-  StandardRepr sr = rc.sr(x,lambda_rho,gamma);
-
-  BlockElt z;
-  non_integral_block block(GR,sr,z);
-
-  f << "Given parameters define element " << z
-    << " of the following block:" << std::endl;
-
-  block.print_to(f,false);
-  block_io::print_KL(f,block,z);
-} // |nblock_f|
-
-void deform_f()
-{
-  RealReductiveGroup& GR = realmode::currentRealGroup();
-
-  Weight lambda_rho;
-  RatWeight gamma(0);
-  KGBElt x;
-
-  SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
-
-  ioutils::OutputFile f;
-
-  Permutation pi;
-
-  f << "Subsystem on dual side is ";
-  if (sub.rank()==0)
-    f << "empty.\n";
-  else
-  {
-    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-      << ", with roots ";
-    for (weyl::Generator s=0; s<sub.rank(); ++s)
-      f << sub.parent_nr_simple(pi[s])
-	<< (s<sub.rank()-1 ? "," : ".\n");
-  }
-
-  Rep_table rt(GR);
-  StandardRepr sr = rt.sr(x,lambda_rho,gamma);
-
-  BlockElt entry_elem;
-  non_integral_block block(GR,sr,entry_elem);
-
-  f << "Given parameters define element " << entry_elem
-    << " of the following block:" << std::endl;
-
-  block.print_to(f,false);
-
-  repr::SR_poly terms = rt.deformation_terms(block,entry_elem);
-
-  std::vector<StandardRepr> pool;
-  HashTable<StandardRepr,unsigned long> hash(pool);
-
-  f << "Orientation numbers:\n";
-  bool first=true;
-  for (BlockElt x=0; x<=entry_elem; ++x)
-    if (block.survives(x))
-    {
-      hash.match(rt.sr(block,x));
-      if (first) first=false;
-      else f<< ", ";
-      StandardRepr r = rt.sr(block,x);
-      f << x << ": " <<  rt.orientation_number(r);
-    }
-  f << ".\n";
-
-  if (block.survives(entry_elem))
-  {
-    f << "Deformation terms for I(" << entry_elem << ")_c: (1-s) times\n";
-    std::ostringstream os;
-    for (repr::SR_poly::const_iterator it=terms.begin(); it!=terms.end(); ++it)
-    {
-      int eval=it->second.e();
-      os << ' ';
-      if (eval==1 or eval==-1)
-	os << (eval==1 ? '+' : '-'); // sign of evaluation
-      else
-	os << std::setiosflags(std::ios_base::showpos) << eval;
-      os <<"I(" << hash.find(it->first) << ")_c";
-    }
-    ioutils::foldLine(f,os.str()) << std::endl;
-
-  }
-} // |deform_f|
-
-void partial_block_f()
-{
-  RealReductiveGroup& GR = realmode::currentRealGroup();
-
-  Weight lambda_rho;
-  RatWeight gamma(0);
-  KGBElt x;
-
-  SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
-
-  ioutils::OutputFile f;
-
-  Permutation pi;
-
-  f << "Subsystem on dual side is ";
-  if (sub.rank()==0)
-    f << "empty.\n";
-  else
-  {
-    f << "of type " << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-      << ", with roots ";
-    for (weyl::Generator s=0; s<sub.rank(); ++s)
-      f << sub.parent_nr_simple(pi[s])
-	<< (s<sub.rank()-1 ? "," : ".\n");
-  }
-
-  Rep_context rc(GR);
-  StandardRepr sr = rc.sr(x,lambda_rho,gamma);
-
-  blocks::non_integral_block block(rc,sr);
-  block.print_to(f,false);
-  block_io::print_KL(f,block,block.size()-1);
-} // |partial_block_f|
 
 
 TorusElement torus_part
@@ -1397,26 +1196,7 @@ void embedding_f()
 
 void test_f()
 {
-  RealReductiveGroup& GR = realmode::currentRealGroup();
-
-  Weight lambda_rho;
-  RatWeight nu(0);
-  KGBElt x;
-
-  SubSystem sub=interactive::get_parameter(GR,x,lambda_rho,nu);
-  Rep_context rc(GR);
-  StandardRepr sr = rc.sr(x,lambda_rho,nu);
-
-  ioutils::OutputFile f;
-
-  BlockElt z;
-  non_integral_block block(GR,sr,z);
-
-  f << "Given parameters define element " << z
-    << " of the following block:" << std::endl;
-
-  block.print_to(f,false);
-  block_io::print_KL(f,block,z);
+  // replace this with your definition
 } // |test_f|
 
 

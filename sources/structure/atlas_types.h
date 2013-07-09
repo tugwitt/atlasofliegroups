@@ -362,11 +362,14 @@ namespace atlas {
   namespace blocks {
     class Block_base;
     class Block;
+    class param_block;
+    class gamma_block;
     class non_integral_block;
     class hBlock;
   }
   using blocks::Block_base;
   using blocks::Block;
+  using blocks::param_block;
   using blocks::non_integral_block;
   using blocks::hBlock;
   typedef unsigned int BlockElt;
