@@ -20,7 +20,7 @@ operators +, -: (ratvec,ratvec->ratvec): additive rational vector arithmetic
 operators >, >=, <, <=, =, != : (int,int->bool): usual relational operators
 operators >, >=, <, <=, =, != : (rat,rat->bool): usual relational operators
 operators =, != : (bool,bool->bool): Boolean equivalence, inequivalence (xor)
-operators =, != : (string,string->bool): string equality and inequality
+operators =, <= : (string,string->bool): string equality and comparison
 operators =, != : (vec,vec->bool): vector equality and inequality
 operators =, != : (mat,mat->bool): matrix equality and inequality
 
@@ -43,6 +43,8 @@ error: (string->*) : abort computation, reporting a runtime error
 int_format: (int->string): representation of integer as digit string
 print: (*->*): print value, followed by newline; return same value
 prints: (*,...->): print values raw (no quotes or commas) followed by newline
+ascii: (string->int): ASCII code of initial character, or -1 if string empty
+ascii: (int->string): string of length 1 with given ASCII code (if safe value)
 
 null: (int->vec): null vector of given length
 null: (int,int->mat): null matrix with given number of rows and columns
@@ -106,7 +108,8 @@ Cartan_matrix_type: (mat->LieType,vec): type given by Cartan matrix.
 
 rank: (LieType->int) Rank of the weight lattice for this Lie type.
 semisimple_rank: (LieType->int) Rank of the root lattice of  this Lie type.
-nr_factors: (LieType->int) Number of (simple or T1) factors in this Lie type
+operator #: (LieType->int) Number of (simple or T1) factors in this Lie type
+operator %: (LieType->[LieType]) Expand into row of simple factors (or T1)
 
 Smith_Cartan: (LieType->mat,vec): compute generators of weights modulo roots.
   Find a Smith basis for the weight lattice relative to the sublattice of
@@ -156,7 +159,7 @@ root_datum: (LieType,mat->RootDatum): root datum for given type and sublattice.
   becomes the standard basis of the sublattice, henceforth called lattice.
 root_datum: ([vec],[vec],int->RootDatum): root datum from simple (co)roots.
   In root_datum(roots,coroots,r), the list of vectors roots and coroots must
-  have the same length (the semisimple rank), and each of thier elements
+  have the same length (the semisimple rank), and each of their elements
   should have size r (which argument is necessary in case the lists are
   empty). A root datum is returned in which roots are the simple roots
   expressed in some basis of the character lattice, and coroots are the simple
@@ -196,11 +199,6 @@ adjoint: (LieType->RootDatum): adjoint root datum for given type.
            od
     in root_datum(type,M)
 
-SL: (int->RootDatum): SL(n) gives root datum for SL(n,C).
-  Make this root datum using the most pleasant "epsilon" basis for sub-lattice
-GL: (int->RootDatum): GL(n) gives root datum for GL(n,C).
-  Make this root datum using the most pleasant "epsilon" basis for sub-lattice
-
 simple_roots: (RootDatum->mat): matrix of simple roots in the root datum.
 simple_coroots: (RootDatum->mat): matrix of simple coroots in the root datum.
 roots: (RootDatum->mat): set of roots in the root datum (columns of result).
@@ -209,7 +207,11 @@ root_coradical: (RootDatum->mat): simple roots and coradical basis.
   With respect to simple_roots, add columns for coradical basis generators
 coroot_radical: (RootDatum->mat): simple coroots and radical basis.
   With respect to simple_coroots, add columns for radical basis generators
+fundamental_weight: (RootDatum,int->ratvec): fundamental weight number $i$
+fundamental_coweight: (RootDatum,int->ratvec): fundamental coweight number $i$
 dual: (RootDatum->RootDatum): dual of given root datum.
+derived: (RootDatum->RootDatum,mat): root datum for derived group, restriction
+  The second argument is matrix mapping weights from original to derived datum.
 rank: (RootDatum->int) Rank of the weight lattice for this Lie type.
 semisimple_rank: (RootDatum->int) Rank of the root lattice of  this Lie type.
 
@@ -351,6 +353,99 @@ fiber_part: (CartanClass,RealForm->[int]): part of fiber group for real form
   2^r-1; as the real form traverses all those for which this Cartan class
   occurs, the results of the function form a partition of that set of numbers.
 
+KGB: (RealFrom,int->KGBElt): select a KGB element x among those of a real form
+  The call KGB(i,rf) selects the element in line i of the print_KGB(rf)
+  output.
+real_form: (KGBElt->RealForm): the real form for which the argument is defined
+involution: (KGBElt->mat): the involution associated to the KGB element
+torus_bits: (KGBElt->vec): torus part of KGB element as vector of 0,1 values
+torus_factor:KGBElt->ratvec): torus part of KGB element, twice that in print_X
+  To be interpreted modulo $(2\Z)^n$, and modulo the image of (transposed)
+  $1-\theta$ acting on $X_*\tensor\Q$.
+operator =: (KGBElt,KGBElt): equality of elements of a same KGB set
+
+param: (KGBElt,vec,ratvec->Param): form parameter from (x,lambda-rho,nu)
+operator %: (Param->KGBElt,vec,ratvec): recover (x,lambda-rho,nu) from param
+real_form: (Param->RealForm): recover the real form from a Param value
+infinitesimal_character: (Param->ratvec): infinitesimal character of parameter
+is_standard: (Param->bool): whether parameter defines a standard module
+is_zero: (Param->bool): whether parameter defines a zero standard module
+is_final: (Param->bool): whether parameter defines a zero standard module
+dominant: (Param->Param): make gamma dominant and do singular complex descents
+operator =: (Param,Param->bool): test equivalence of parameters
+  This is implemented by applying make_dominant and testing identity of all
+  three components x, lambda (defined modulo (1-theta_x)X^*) and nu.
+orientation_nr: (Param->int): the orientation number
+reducibility_points: (Param->[rat]): the 0<t<=1 with I(x,lambda,t\nu) reducible
+print_n_block: (Param->): print (nonintegral) block generated from parameter
+n_block: (Param->[Param],int): return block as list of parameters, and index
+  The second component is the index into the first of the original parameter.
+KL_block: (Param->[Param],int,mat,[vec],vec,vec,mat): n_block, raw_KL, and more
+  This combines n_block with the Kazhdan-Lustzig table for the block appended,
+  and two more values that allow cumulation to be performed. The two values of
+  n_block are followed by three values in the format of raw_KL below: a matrix
+  of indices into the following list of polynomials, coded as a list of
+  coefficient vectors, and finally a list of indices where the length function
+  increases. Finally follow a vector with indices of the block elements for
+  which the the representation at regular infinitesimal character survives the
+  translation functor to the (possibly) singular infinitesimal character of
+  the given parameter, and a matrix whose rows correspond to these survivors,
+  and it columns to all block elements; the entry gives the coefficient by
+  which the block element for its column contributes to the surviving
+  parameter for its row, with a sign given by the parity of the length
+  difference between contributing and contributed-to elements. Thus one can
+  transform the given KL matrix at regular infinitesimal character to one at
+  possibly singular infinitesimal as follows: select only the columns of the
+  KL matrix whose index is among the survivors, and then multiply the
+  resulting matrix on the left by the contibution-coefficient matrix.
+partial_block: (Param->[Param],mat,[vec],vec,vec,mat) partial KL_block
+  This function operates like KL_block, but only constructs the Bruhat
+  interval below the initial parameter, sorted by length. The second component
+  of the result of KL_block is then superfluous and omitted, as the initial
+  parameter is always the final element of the partial block. All other result
+  components are the same is in KL_block, but truncated to match the interval.
+
+operator +: (Split,Split->Split): addition of split integers
+operator -: (Split,Split->Split): subtraction of split integers
+operator -: (Split->Split): negation of a split integer
+operator *: (Split,Split->Split): multiplication of split integers
+operator %: (Split,int,int): decomposition of split integer into components
+
+null_module: (RealForm->ParamPol): empty sum of parameters for the real form
+real_form: (ParamPol->RealForm): recover the real form from a ParamPol value
+operator #: (ParamPol->int): number of nonzero terms of the formal sum
+operator +: (ParamPol,Param->ParamPol): add parameter to formal sum
+operator +: (ParamPol,(Split,Param)->ParamPol): add parameter with coefficient
+operator +: (ParamPol,[(Split,Param)]->ParamPol): add terms to formal sum
+operator +: (ParamPol,ParamPol->ParamPol): addition of formal sums
+operator *: (int,ParamPol->ParamPol): integer multiple of a formal sum
+operator *: (Split,ParamPol->ParamPol): split integer multiple of a formal sum
+
+deform: (Param->ParamPol): compute deformation terms when nu decreases
+  The non-integral block for the parameter and its KL polynomials are
+  computed, from which the deformation terms involing other members of the
+  block are computed. They are returned as a formal sum of paramters with
+  split integer coefficients, which are in fact integer multiples of (1-s).
+
+full_deform: (Param->ParamPol): perform deformation all the way to nu=0
+  This is like deform, but recursively deforms all new terms produced as long
+  as they do not have nu=0; all terms in the reult therfore have nu=0
+
+KL_sum_at_s: (Param->ParamPol): signed sum of KL polynomials at s, fixed y
+  Computes \sum_{x\leq y}(-1)^{l(y)-l(x)}P_{x,y}[q:=s] where y is the block
+  elementof the parameter, and the sum is over other block elements x.
+
+raw_KL: (RealForm,DualRealForm->mat,[vec],vec): Kazhdan-Lusztig data, raw form
+  The call raw_KL(rf,drf) produces a matrix of numbers identifying
+  polynomials, a list of those polynomials in the form of coefficient vectors,
+  and a sequence of length boundaries that allow deducing the "lengths" of the
+  integers used to index the matrix. These integers identify block elements
+  for the block print_block(rf,drf). If (M,L,len)=raw_KL(rf,drf), and v,w are
+  integers identifying block elements, then the vector L[M[v,w]] gives the
+  coefficients of the KL polynomial P_{v,w}. The length of v is the lergest
+  index i such that len[i]<=v, so the length difference between v and w is the
+  number of indices with v<len[i]<=w.
+
 print_gradings: (CartanClass,RealForm->): print gradings defined by real form
   This more or less gives the output of the 'gradings' command in the Atlas
   software, for the selected real form. The type of the imaginary root system
@@ -369,6 +464,7 @@ print_blocku: (RealForm,DualRealForm->):
 print_blockd: (RealForm,DualRealForm->):
 print_blockstabilizer: (RealForm,DualRealForm,CartanClass->):
 print_KGB: (RealForm->):
+print_X: (InnerClass->):
 print_KL_basis: (RealForm,DualRealForm->): :print_KL_basis:
 print_prim_KL: (RealForm,DualRealForm->): :print_prim_KL:
 print_KL_list: (RealForm,DualRealForm->): :print_KL_list:

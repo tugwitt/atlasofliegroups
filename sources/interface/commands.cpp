@@ -2,13 +2,14 @@
   This is commands.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For copyright and license information see the LICENSE file
 */
 
 #include "commands.h"
 
+#include <cstdio>   // not obviously used, but appears helpful for Windows
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -65,7 +66,7 @@ namespace { // declarations private to commands.cpp
   void ambiguous(const std::vector<const char*>&, const char*);
   void execute(const char* name, const CommandMode* mode);
   const char* getCommand(const CommandMode* mode);
-  std::istream& getInteractive(std::istream&, std::string&, const char*);
+  void getInteractive(std::string&, const char*);
 
   // auxiliary functions
 
@@ -534,7 +535,7 @@ void execute(const char* name, const CommandMode* mode)
   }
   catch (std::exception& e)
   {
-    std::cerr << "error occurrend: " << e.what() << std::endl;
+    std::cerr << "error occurred: " << e.what() << std::endl;
   }
   catch (...)
   {
@@ -559,7 +560,7 @@ const char* getCommand(const CommandMode* mode)
     commandStack.pop();
   } else {  // get command from user
     nameString.erase();
-    getInteractive(std::cin,nameString,mode->prompt());
+    getInteractive(nameString,mode->prompt());
     name = nameString.c_str();
   }
 
@@ -570,19 +571,16 @@ const char* getCommand(const CommandMode* mode)
 /*
   Synopsis: gets a command interactively from the user.
 
-  The actual input line is gotten through the readline library. For convenience
-  we pack it into an InputBuffer (defined in input.h), in order to have a
-  C++-like interaction.
+  The actual input line is gotten through the readline library. For
+  convenience we pack it into a global InputBuffer variable |commandLine|, in
+  order to have a C++-like interaction.
 */
-std::istream& getInteractive(std::istream& strm, std::string& name,
-			     const char* prompt)
+void getInteractive(std::string& name, const char* prompt)
 {
   using namespace input;
 
-  commandLine.getline(strm,prompt);
+  commandLine.getline(prompt);
   commandLine >> name;
-
-  return strm;
 }
 
 } // namespace

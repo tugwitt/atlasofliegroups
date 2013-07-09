@@ -2,7 +2,7 @@
   This is kl_io.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -109,10 +109,9 @@ std::ostream& printPrimitiveKL
   BruhatOrder& bo=block.bruhatOrder(); // non-const!
   const poset::Poset& Bruhat=bo.poset(); // full poset is generated here
 
-  for (size_t y = 0; y < klc.size(); ++y) {
-
-    kl::PrimitiveRow e;
-    klc.makePrimitiveRow(e,y); // list of ALL primitive x's
+  for (size_t y = 0; y < klc.size(); ++y)
+  {
+    kl::PrimitiveRow e = klc.primitiveRow(y); // list of ALL primitive x's
 
     strm << std::setw(width) << y << ": ";
     bool first = true;
@@ -140,9 +139,13 @@ std::ostream& printPrimitiveKL
       {
 	assert(klc.klPol(e[j],y).isZero());
 	++incomp_count;
-      }
-    strm << std::endl;
-  }
+      } // |for (j)|
+
+    ++count; // count $P_{y,y}$
+    if (not first)
+      strm << std::setw(width+tab)<< "";
+    strm << std::setw(width) << y << ": 1" << std::endl << std::endl;
+  } // |for(y)|
 
   strm << count  << " Bruhat-comparable primitive "
        << (count==1 ? "pair" : "pairs")
@@ -188,10 +191,10 @@ std::ostream& printMu(std::ostream& strm, const kl::KLContext& klc)
   for (size_t y = 0; y < klc.size(); ++y) {
     const kl::MuRow& mrow = klc.muRow(y);
     strm << std::setw(width) << y << ": ";
-    for (size_t j = 0; j < mrow.first.size(); ++j) {
+    for (size_t j = 0; j < mrow.size(); ++j) {
       if (j>0)
 	strm << ",";
-      strm << "(" << mrow.first[j] << "," << mrow.second[j] << ")";
+      strm << "(" << mrow[j].first << "," << mrow[j].second << ")";
     }
     strm << std::endl;
   }

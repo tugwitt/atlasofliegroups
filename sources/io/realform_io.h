@@ -2,7 +2,7 @@
   This is realform_io.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -11,6 +11,7 @@
 #define REALFORM_IO_H
 
 #include <iosfwd>
+#include <string>
 
 #include "atlas_types.h"
 #include "tags.h"

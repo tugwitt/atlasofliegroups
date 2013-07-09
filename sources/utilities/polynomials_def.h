@@ -22,7 +22,7 @@
 
   Copyright (C) 2004,2005 Fokko du Cloux
   Copyright (C) 2009 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -210,10 +210,25 @@ bool compare (const Polynomial<C>& p, const Polynomial<C>& q)
 */
 template<typename C> void safeAdd(C& a, C b)
 {
+  assert(a>=C(0)); // we're try to conserve this; it'd better be true intially
+  assert(b>=C(0)); // so the we only need to check for overflow
   if (b > std::numeric_limits<C>::max() - a)
     throw error::NumericOverflow();
   else
     a += b;
+}
+
+/*!
+  \brief a /= b.
+
+  Throws a NumericOverflow exception in case of nondivisibility.
+*/
+template<typename C> void safeDivide(C& a, C b)
+{
+  if (a%b != 0) // safe use of |%|, since test is against |0|
+    throw error::NumericOverflow();
+  else
+    a /= b; // now division is exact, so safe use of |/=|
 }
 
 
@@ -224,6 +239,8 @@ template<typename C> void safeAdd(C& a, C b)
 */
 template<typename C> void safeProd(C& a, C b)
 {
+  assert(a>=C(0)); // we're try to conserve this; it'd better be true intially
+  assert(b>=C(0)); // so the we only need to check for overflow
   if (a == 0) // do nothing
     return;
 
@@ -235,12 +252,14 @@ template<typename C> void safeProd(C& a, C b)
 
 
 /*!
-  \brief a *= b.
+  \brief a -= b.
 
-  Throws a NumericOverflow exception in case of overflow.
+  Throws a NumericUnderflow exception in case of underflow.
 */
 template<typename C> void safeSubtract(C& a, C b)
 {
+  assert(a>=C(0)); // we're try to conserve this; it'd better be true intially
+  assert(b>=C(0)); // so the we only need to check for underflow
   if (b > a)
     throw error::NumericUnderflow();
   else
@@ -294,6 +313,45 @@ void Safe_Poly<C>::safeAdd(const Safe_Poly& q, Degree d)
     polynomials::safeAdd((*this)[j+d],q[j]); // this may throw
 }
 
+/*!
+
+\brief Divides polynomial by scalar c, throwing an error is division is inexact
+*/
+template<typename C>
+void Safe_Poly<C>::safeDivide(C c)
+{
+  for (size_t j = 0; j < base::size(); ++j )
+    polynomials::safeDivide((*this)[j],c); //this may throw
+}
+
+/* Divides polynomials by $q+1$, imagining if necessary an additional leading
+term \mu*q^{d+1} to make division exact, with appropriate scalar \mu and
+d=(delta-1)/2 should be whole. We'll have delta==l(y)-l(x), whence the name.
+
+Imagining such a term should be necessary only if the current degree of the
+polynomial is precisely $d$, since the quotient must have non-negative
+coefficients, and if it has a positive coefficient of $q^d$ then so does its
+product by $q+1$.
+
+However it could be that $\mu=0$, in which case the polynomial is already
+divisible by $q+1$; then the quotient must have degree strictly less than the
+half-integer $(delta-1)/2$. Whence the assertion |2*degree()<delta-1$.
+*/
+template<typename C>
+void Safe_Poly<C>::safeQuotient(Degree delta)
+{
+  if (base::isZero()) // this avoids problems with |base::degree()|
+    return; // need not and cannot invent nonzero \mu*q^{d+1} here
+  for (size_t j = 1; j <= base::degree(); ++j)
+    polynomials::safeSubtract((*this)[j],(*this)[j-1]); // does c[j] -= c[j-1]
+  if ((*this)[base::degree()]==0) // number tested is the candidate for \mu
+  { // polynomial was already multiple of q+1
+    base::adjustSize(); // decreases degree by exactly 1
+    assert(2*base::degree()+1<delta);
+  }
+  else
+    assert(2*base::degree()+1==delta); // a term \mu*q^{d+1} is needed
+}
 
 /*!
   \brief Subtracts x^d.c.q from *this, watching for underflow, assuming |c>0|

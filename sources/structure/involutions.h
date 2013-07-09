@@ -2,7 +2,7 @@
   This is involurions.h
 
   Copyright (C) 2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -37,6 +37,7 @@ namespace involutions {
 
 
 // this class gathers some information associated to a root datum involution
+// the data depends only on the permutation of the |RootSystem| by |theta|
 class InvolutionData
 {
   Permutation d_rootInvolution; // permutation of all roots
@@ -91,13 +92,16 @@ class InvolutionTable
 
  private:
   weyl::TI_Entry::Pooltype pool;
-  hashtable::HashTable<weyl::TI_Entry, InvolutionNbr> hash;
+  HashTable<weyl::TI_Entry, InvolutionNbr> hash;
 
   struct record
   {
+    InvolutionData id; // stuff that does not involve weight coordinates
     WeightInvolution theta;
     int_Matrix projector; // for |y|, same kernel as |row_saturate(theta-id)|
-    InvolutionData id;
+    int_Matrix M_real; // $1-\theta$ followed by expression in adapted basis
+    int_Vector diagonal; // divisors for image of |M_real|
+    int_Matrix lift_mat; // section: satisfies |M_real*lift_mat==diag(diagonal)|
     unsigned int length;
     unsigned int W_length;
     SmallSubspace mod_space; // for |x|
@@ -105,11 +109,13 @@ class InvolutionTable
   record(const WeightInvolution& inv,
 	 const InvolutionData& inv_d,
 	 const int_Matrix& proj,
+	 const int_Matrix& Mre, const std::vector<int>&d, const int_Matrix& lm,
 	 unsigned int l,
 	 unsigned int Wl,
 	 const SmallSubspace& ms)
-  : theta(inv), projector(proj)
-  , id(inv_d),length(l), W_length(Wl), mod_space(ms) {}
+  : id(inv_d), theta(inv)
+  , projector(proj), M_real(Mre), diagonal(d), lift_mat(lm)
+  , length(l), W_length(Wl), mod_space(ms) {}
   };
 
   std::vector<record> data;
@@ -182,6 +188,13 @@ class InvolutionTable
   KGB_elt_entry x_pack(const GlobalTitsElement& x) const; // for X only; slow
   bool x_equiv(const GlobalTitsElement& x0,const GlobalTitsElement& x1) const;
   TorusPart check_rho_imaginary(InvolutionNbr i) const;
+
+  // choose unique representative for real projection of rational weight
+  void real_unique(InvolutionNbr i, RatWeight& y) const;
+
+  // pack $\lambda-\rho$ into a |TorusPart|
+  TorusPart pack(InvolutionNbr i, const Weight& lambda_rho) const;
+  Weight unpack(InvolutionNbr i, TorusPart y_part) const;
 
   // the following produces a light-weight function object calling |involution|
   class mapper

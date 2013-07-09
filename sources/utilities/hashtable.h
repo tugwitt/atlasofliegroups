@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2006 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -14,6 +14,7 @@
 #define HASHTABLE_H
 
 #include "hashtable_fwd.h"
+#include <vector>
 
 namespace atlas {
 namespace hashtable {

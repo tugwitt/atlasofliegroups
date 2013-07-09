@@ -2,7 +2,7 @@
   This is interactive.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -148,7 +148,7 @@ std::string getFileName(const std::string& prompt)
 {
   input::InputBuffer buf;
 
-  buf.getline(std::cin, prompt.c_str(), false); // get line, no history
+  buf.getline(prompt.c_str(), false); // get line, no history
 
   if (hasQuestionMark(buf))
     throw error::InputError();
@@ -277,13 +277,13 @@ getInnerClass(lietype::Layout& lo, const WeightList& basis)
 */
 void getInteractive(LieType& d_lt) throw(error::InputError)
 {
-  type_input_buffer.getline(std::cin,"Lie type: ");
+  type_input_buffer.getline("Lie type: ");
 
   if (hasQuestionMark(type_input_buffer))
     throw error::InputError();
 
   while (not interactive_lietype::checkLieType(type_input_buffer)) { // retry
-    type_input_buffer.getline(std::cin,"Lie type (? to abort): ");
+    type_input_buffer.getline("Lie type (? to abort): ");
     if (hasQuestionMark(type_input_buffer))
       throw error::InputError();
   }
@@ -311,13 +311,13 @@ void getInteractive(InnerClassType& ict, const LieType& lt)
   if (interactive_lietype::checkInnerClass(inputBuf,lt,false))
     goto read; // skip interaction if |inputBuf| alreadty has valid input
 
-  inputBuf.getline(std::cin,"enter inner class(es): ",false);
+  inputBuf.getline("enter inner class(es): ",false);
 
   if (hasQuestionMark(inputBuf))
     throw error::InputError();
 
   while (not interactive_lietype::checkInnerClass(inputBuf,lt)) { // retry
-    inputBuf.getline(std::cin,"enter inner class(es) (? to abort): ",false);
+    inputBuf.getline("enter inner class(es) (? to abort): ",false);
     if (hasQuestionMark(inputBuf))
       throw error::InputError();
   }
@@ -609,7 +609,7 @@ unsigned long get_bounded_int(input::InputBuffer& ib,
 			      unsigned long limit)
   throw(error::InputError)
 {
-  ib.getline(std::cin,prompt,true);
+  ib.getline(prompt,true);
 
   ioutils::skipSpaces(ib);
   if (hasQuestionMark(ib))
@@ -624,7 +624,7 @@ unsigned long get_bounded_int(input::InputBuffer& ib,
 
   while (c >= limit) {
     std::cout << "sorry, value must be between 0 and " << limit-1 << std::endl;
-    ib.getline(std::cin,"try again (? to abort): ",true);
+    ib.getline("try again (? to abort): ",true);
     ioutils::skipSpaces(ib);
     if (hasQuestionMark(ib))
       throw error::InputError();
@@ -671,7 +671,7 @@ unsigned long get_int_in_set(const char* prompt,
 
   // otherwise prompt and get test into a fresh input buffer
   input::InputBuffer ib;
-  ib.getline(std::cin,prompt,false);
+  ib.getline(prompt,false);
 
   ioutils::skipSpaces(ib);
 
@@ -687,7 +687,7 @@ unsigned long get_int_in_set(const char* prompt,
   {
     std::cout << "sorry, value must be one of ";
     basic_io::seqPrint(std::cout,vals.begin(),vals.end()) << std::endl;
-    ib.getline(std::cin,"try again (? to abort): ",false);
+    ib.getline("try again (? to abort): ",false);
     ioutils::skipSpaces(ib);
     if (hasQuestionMark(ib))
       throw error::InputError();
@@ -707,7 +707,7 @@ Weight get_weight(input::InputBuffer& ib,
 				size_t rank)
   throw(error::InputError)
 {
-  ib.getline(std::cin,prompt,true);
+  ib.getline(prompt,true);
   Weight result(rank);
 
   for (size_t i = 0; i<rank; ++i)
@@ -738,9 +738,7 @@ RatWeight get_ratweight(input::InputBuffer& ib,
   return RatWeight(num,denom);
 }
 
-standardrepk::StandardRepK
-get_standardrep(const standardrepk::SRK_context& c)
-  throw(error::InputError)
+StandardRepK get_standardrep(const SRK_context& c) throw(error::InputError)
 {
   unsigned long x=get_bounded_int
     (sr_input_buffer,"Choose KGB element: ",c.kgb().size());
@@ -753,8 +751,7 @@ get_standardrep(const standardrepk::SRK_context& c)
   return c.std_rep_rho_plus(lambda,c.kgb().titsElt(x));
 }
 
-repr::StandardRepr get_repr(const repr::Rep_context& c)
-  throw(error::InputError)
+StandardRepr get_repr(const Rep_context& c) throw(error::InputError)
 {
   unsigned long x=get_bounded_int
     (sr_input_buffer,"Choose KGB element: ",c.kgb().size());
@@ -773,13 +770,12 @@ SubSystem get_parameter(RealReductiveGroup& GR,
 			KGBElt& x,
 			Weight& lambda_rho,
 			RatWeight& gamma)
+  throw(error::InputError)
 {
   // first step: get initial x in canonical fiber
   size_t cn=get_Cartan_class(GR.Cartan_set());
   const ComplexReductiveGroup& G=GR.complexGroup();
   const RootDatum& rd=G.rootDatum();
-  TwistedInvolution tw=G.twistedInvolution(cn);
-  InvolutionData id = G.involution_data(tw);
 
   const KGB& kgb=GR.kgb();
   KGBEltList canonical_fiber;
@@ -788,7 +784,7 @@ SubSystem get_parameter(RealReductiveGroup& GR,
     if (kgb.Cartan_class(k)==cn)
     {
       cf.insert(k);
-      if (kgb.involution(k)==tw)
+      if (kgb.involution(k)==G.twistedInvolution(cn))
 	canonical_fiber.push_back(k);
     }
 
@@ -806,22 +802,28 @@ SubSystem get_parameter(RealReductiveGroup& GR,
     x = get_int_in_set("KGB number: ",cf);
   }
 
-  WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
+  const InvolutionTable& i_tab = G.involution_table();
+  // the call to |kgb()| above ensures |i_tab| has all relevant involutions
+  InvolutionNbr i_x = kgb.inv_nr(x);
+  const WeightInvolution& theta = i_tab.matrix(i_x);
 
   // second step: get imaginary-dominant lambda
   RatWeight rho(rd.twoRho(),2);
   std::cout << "rho = " << rho.normalize() << std::endl;
-  if (id.imaginary_rank()>0)
+  if (i_tab.imaginary_rank(i_x)>0)
   {
     std::cout << "NEED, on following imaginary coroot"
-      << (id.imaginary_rank()>1
+      << (i_tab.imaginary_rank(i_x)>1
 	  ? "s, at least given values:" : ", at least given value:")
       << std::endl;
-    for (size_t i=0; i<id.imaginary_rank(); ++i)
-      std::cout
-	<< rd.coroot(id.imaginary_basis(i))
-	<< " (>=" << -rho.scalarProduct(rd.coroot(id.imaginary_basis(i)))
-	<< ')' << std::endl;
+    for (size_t i=0; i<i_tab.imaginary_rank(i_x); ++i)
+    {
+      RootNbr alpha = i_tab.imaginary_basis(i_x,i);
+      int v=-rho.scalarProduct(rd.coroot(alpha));
+      if (kgb::status(kgb,x,rd,alpha)==gradings::Status::ImaginaryCompact)
+	++v; // imaginary compact root should not be singular
+      std::cout	<< rd.coroot(alpha) << " (>=" << v << ')' << std::endl;
+    }
   }
 
   { // check imaginary dominance
@@ -830,16 +832,23 @@ SubSystem get_parameter(RealReductiveGroup& GR,
     {
       lambda_rho = get_weight(sr_input(),"Give lambda-rho: ",rd.rank());
       Weight l = lambda_rho*2 + rd.twoRho();
-      for (i=0; i<id.imaginary_rank(); ++i)
-	if (l.scalarProduct(rd.coroot(id.imaginary_basis(i)))<0)
+      for (i=0; i<i_tab.imaginary_rank(i_x); ++i)
+      {
+	RootNbr alpha = i_tab.imaginary_basis(i_x,i);
+	int v = l.dot(rd.coroot(alpha));
+	bool compact =
+	  kgb::status(kgb,x,rd,alpha)==gradings::Status::ImaginaryCompact;
+	if (v<0 or (v==0 and compact))
 	{
-	  std::cout
-	    << "Non-dominant for coroot " << rd.coroot(id.imaginary_basis(i))
-	    << ", try again" << std::endl;
+	  std::cout << (v<0 ? "Non-dominant for"
+			    : "Zero due to singular imaginary compact")
+		    << " coroot " << rd.coroot(alpha)
+		    << ", try again" << std::endl;
 	  break;
 	}
+      }
     }
-    while (i<id.imaginary_rank()); // wait until inner loop runs to completion
+    while (i<i_tab.imaginary_rank(i_x)); // wait until inner loop completes
   }
 
   RatWeight nu = get_ratweight(sr_input(),"nu: ",rd.rank());
@@ -852,46 +861,72 @@ SubSystem get_parameter(RealReductiveGroup& GR,
   }
 
 
-  SubSystem sub = SubSystem::integral(rd,gamma); // fix integral system now
+  Ratvec_Numer_t& numer = gamma.numerator(); // we change |gamma| using it
+  bool changed = false;
 
-  Weight& numer = gamma.numerator(); // we change |gamma| using it
-
-  // make $\gamma$ dominant for the integral system, acting on |x|,|lambda| too
-  // also act by integral coroots vanishing on $\gamma$ if complex descents
+  // although our goal is to make gamma dominant for the integral system only
+  // it does not hurt to make gamma fully dominant, acting on |x|,|lambda| too
   { weyl::Generator s;
-    const RootNbrSet& real = id.real_roots();
-    Weight twoRho_real = rd.twoRho(real);
     do
     {
-      for (s=0; s<sub.rank(); ++s)
+      for (s=0; s<rd.semisimpleRank(); ++s)
       {
-	RootNbr alpha = sub.parent_nr_simple(s);
-        int v=rd.coroot(alpha).dot(numer);
+	RootNbr alpha = rd.simpleRootNbr(s);
+        int v=rd.simpleCoroot(s).dot(numer);
         if (v<0)
         {
-          rd.reflect(numer,alpha);
-          rd.reflect(lambda_rho,alpha);
-	  lambda_rho -= rd.root(alpha)*rd.colevel(alpha);
-	  if (real.isMember(alpha))
-	    lambda_rho -= rd.root(alpha)*(twoRho_real.dot(rd.coroot(alpha))/2);
-          x = kgb.cross(sub.reflection(s),x);
+	  bool real = i_tab.real_roots(kgb.inv_nr(x)).isMember(alpha);
+#ifdef VERBOSE
+	  std::cout << "Making dominant for "  << (real ? "real" : "complex")
+		    << " coroot " << alpha << std::endl;
+#endif
+          rd.simpleReflect(numer,s);
+          rd.simpleReflect(lambda_rho,s);
+	  if (not real) // center is $\rho$, but $\rho_r$ cancels if |real|
+	    lambda_rho -= rd.simpleRoot(s);
+          x = kgb.cross(s,x);
+	  changed = true;
           break;
         }
-        else if (v==0 and kgb.isComplexDescent(sub.simple(s),
-					       kgb.cross(sub.to_simple(s),x)))
+        else if (v==0 and kgb.isComplexDescent(s,x))
         {
-          rd.reflect(lambda_rho,alpha);
-	  lambda_rho -= rd.root(alpha)*rd.colevel(alpha);
-          x = kgb.cross(sub.reflection(s),x);
+#ifdef VERBOSE
+	  std::cout << "Applying complex descent for singular coroot "
+		    << alpha << std::endl;
+#endif
+          rd.simpleReflect(lambda_rho,s); lambda_rho -= rd.simpleRoot(s);
+          x = kgb.cross(s,x);
+	  changed = true;
           break;
         }
       }
     }
-    while (s<sub.rank()); // wait until inner loop runs to completion
+    while (s<rd.semisimpleRank()); // wait until inner loop runs to completion
+    // now |gamma| has been made dominant
 
-  } // |gamma| made integrally dominant
+    if (changed)
+      std::cout << "Parameter modified to: ";
 
-  return sub;
+    std::cout << "x="<< x << ", lambda="
+	      << RatWeight(lambda_rho*2+rd.twoRho(),2).normalize()
+	      << ", gamma=" << gamma << '.' << std::endl;
+
+    const RootNbrList& simple_real = i_tab.real_basis(kgb.inv_nr(x));
+    for (RootNbrList::const_iterator
+	   it=simple_real.begin(); it!=simple_real.end(); ++it)
+      {
+	const Coweight& cw = rd.coroot(*it);
+	if (cw.dot(numer)==0 and (cw.dot(lambda_rho)-rd.colevel(*it))%2==0)
+	{
+	  std::cout << "Parameter is not final, as witnessed by coroot "
+		    << cw <<  ".\n";
+	  throw error::InputError();
+	}
+      }
+
+  }
+
+  return SubSystem::integral(rd,gamma); // fix integral system only now
 }
 
 

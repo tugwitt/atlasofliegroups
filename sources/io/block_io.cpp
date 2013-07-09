@@ -2,7 +2,7 @@
   This is block_io.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -13,10 +13,13 @@
 #include <iostream>
 #include <sstream>
 #include <cassert>
+#include <map>
 
+#include "polynomials.h"
 #include "blocks.h"
 #include "kgb.h"     // |kgb.size()|
 #include "complexredgp.h" // |twoRho| in |nu_block::print|
+#include "kl.h"
 
 #include "basic_io.h"	// operator |<<|
 #include "ioutils.h"	// |digits|
@@ -82,52 +85,68 @@ std::ostream& Block_base::print_to(std::ostream& strm,
       strm << ')' << std::setw(pad) << "";
     }
 
-    // derived class specific output
-    print(strm,z) << std::setw(pad) << "";
-
-    // print root datum involution
-    if (as_invol_expr)
-      prettyprint::printInvolution(strm,involution(z),tW);
-    else
-      prettyprint::printWeylElt(strm,involution(z),tW.weylGroup());
-
-    strm << std::endl;
+    // finish with derived class specific output
+    print(strm,z,as_invol_expr) << std::endl;
   } // |for (z)|
 
   return strm;
 } // |print_on|
 
 
-std::ostream& Block::print(std::ostream& strm, BlockElt z) const
+std::ostream& Block::print
+  (std::ostream& strm, BlockElt z,bool as_invol_expr) const
 {
   int cwidth = ioutils::digits(max_Cartan(),10ul);
-  return strm << std::setw(cwidth) << Cartan_class(z);
+  strm << std::setw(cwidth) << Cartan_class(z) << std::setw(2) << "";
+
+  // print root datum involution
+  if (as_invol_expr)
+    prettyprint::printInvolution(strm,involution(z),twistedWeylGroup());
+  else
+    prettyprint::printWeylElt(strm,involution(z),weylGroup());
+
+  return strm ;
 }
 
-std::ostream& gamma_block::print(std::ostream& strm, BlockElt z) const
+std::ostream& gamma_block::print
+  (std::ostream& strm, BlockElt z,bool as_invol_expr) const
 {
   int xwidth = ioutils::digits(kgb.size()-1,10ul);
 
   RatWeight ls = local_system(z);
-  return strm << "(=" << std::setw(xwidth) << kgb_nr_of[d_x[z]]
-	      << ',' << std::setw(3*ls.size()+3) << ls
-	      << ')';
+  strm << "(=" << std::setw(xwidth) << parent_x(z)
+       << ',' << std::setw(3*ls.size()+3) << ls
+       << ')' << std::setw(2) << "";
+
+  // print root datum involution
+  if (as_invol_expr)
+    prettyprint::printInvolution(strm,involution(z),kgb.twistedWeylGroup());
+  else
+    prettyprint::printWeylElt(strm,involution(z),kgb.weylGroup());
+
+  return strm ;
 }
 
-std::ostream& non_integral_block::print(std::ostream& strm, BlockElt z) const
+std::ostream& non_integral_block::print
+  (std::ostream& strm, BlockElt z,bool as_invol_expr) const
 {
   int xwidth = ioutils::digits(kgb.size()-1,10ul);
-  RatWeight ll=lambda(z).normalize();
-  assert(ll.denominator()<=2);
+  RatWeight ll=y_part(z);
 
-  strm << (is_nonzero(z) ? '*' : ' ')
-       << "(" << std::setw(xwidth) << kgb_nr_of[d_x[z]] << ',' ;
-  if (ll.denominator()==2)
-    strm << std::setw(3*ll.size()+3) << ll;
-  else
-    strm << std::setw(3*ll.size()+1) << ll.numerator();
-  strm << "= rho+" << std::setw(4*ll.size()+1) << lambda_rho(z);
-  return strm << ')';
+  strm << (survives(z) ? '*' : ' ')
+       << "(x=" << std::setw(xwidth) << parent_x(z)
+       << ", nu=" << std::setw(2*ll.size()+5) << nu(z);
+//strm << ',' << std::setw(2*ll.size()+5) << ll;
+  strm << ",lam=rho+" << std::setw(2*ll.size()+3) << lambda_rho(z);
+  strm << ')' << std::setw(2) << "";
+
+  const TwistedInvolution& ti = kgb.involution(parent_x(z));
+  const TwistedWeylGroup& tW = kgb.twistedWeylGroup();
+  // print root datum involution
+  if (as_invol_expr) prettyprint::printInvolution(strm,ti,tW);
+  else prettyprint::printWeylElt(strm,ti,tW.weylGroup());
+
+  return strm ;
 }
 
 
@@ -378,6 +397,50 @@ std::ostream& printDescent(std::ostream& strm,
   return strm;
 }
 
+std::ostream& print_KL(std::ostream& f, non_integral_block& block, BlockElt z)
+{
+  // silently fill the whole KL table
+  const kl::KLContext& klc = block.klc(z,false);
+
+  typedef Polynomial<int> Poly;
+  typedef std::map<BlockElt,Poly> map_type;
+  map_type acc; // non-zero $x'\mapsto\sum_{x\downarrow x'}\eps(z/x)P_{x,z}$
+  unsigned int parity = block.length(z)%2;
+  for (size_t x = 0; x <= z; ++x)
+  {
+    const kl::KLPol& pol = klc.klPol(x,z);
+    if (not pol.isZero())
+    {
+      Poly p(pol); // convert
+      if (block.length(x)%2!=parity)
+	p*=-1;
+      BlockEltList nb=block.survivors_below(x);
+      for (size_t i=0; i<nb.size(); ++i)
+      {
+	std::pair<map_type::iterator,bool> trial =
+	  acc.insert(std::make_pair(nb[i],p));
+	if (not trial.second) // failed to create a new entry
+	  trial.first->second += p;
+      } // |for (i)| in |nb|
+    } // |if(pol!=0)|
+  } // |for (x<=z)|
+
+
+  f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
+    << "KL polynomials (-1)^{l(" << z << ")-l(x)}*P_{x," << z << "}:\n";
+  int width = ioutils::digits(z,10ul);
+  for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
+  {
+    BlockElt x = it->first;
+    const Poly& pol = it->second;
+    if (not pol.isZero())
+    {
+      f << std::setw(width) << x << ": ";
+      prettyprint::printPol(f,pol,"q") << std::endl;
+    }
+  }
+  return f;
+}
 
 } // |namespace block_io|
 

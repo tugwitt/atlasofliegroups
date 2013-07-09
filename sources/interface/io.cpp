@@ -2,7 +2,7 @@
   This is io.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For copyright and license information see the LICENSE file
 */
@@ -11,6 +11,12 @@
 
 #include <fstream>
 #include <string>
+
+/* the following macro should be set to an absolute path from the atlas
+   makefile, but if not we use a relative path from the atlas directory */
+#ifndef MESSAGE_DIR_MACRO
+#define MESSAGE_DIR_MACRO "messages/"
+#endif
 
 /****************************************************************************
 
@@ -22,6 +28,7 @@ namespace atlas {
 
 namespace io {
 
+const char* MESSAGE_DIR = MESSAGE_DIR_MACRO;
 
 /*
   Prints the contents of the file with name a to strm.

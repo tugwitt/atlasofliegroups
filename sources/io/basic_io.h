@@ -2,7 +2,7 @@
   This is basic_io.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -36,8 +36,9 @@ namespace weyl {
   std::ostream& operator<< (std::ostream&, const WeylWord&);
 }
 
-namespace matrix { // since |Weight| = |matrix::Vector<int>|
-  std::ostream& operator<< (std::ostream&, const Weight&);
+namespace matrix {
+  template<typename C>
+    std::ostream& operator<< (std::ostream&, const Vector<C>&);
 }
 
 namespace polynomials {
@@ -58,6 +59,12 @@ namespace bitvector {
 template<size_t dim>
   std::ostream& operator<< (std::ostream&, const BitVector<dim>&);
 }
+
+namespace arithmetic {
+
+  std::ostream& operator<< (std::ostream& strm, const Split_integer& s);
+
+} // |namespace arithmetic|
 
 namespace basic_io {
 

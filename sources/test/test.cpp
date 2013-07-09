@@ -2,7 +2,7 @@
   This is test.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -444,7 +444,7 @@ void sub_KGB_f()
   RealReductiveGroup& G = realmode::currentRealGroup();
   standardrepk::KhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
 
   WeylWord ww;
   standardrepk::PSalgebra p= khc.theta_stable_parabolic(sr,ww);
@@ -475,7 +475,7 @@ void trivial_f()
   for (size_t i=0; i<subset.size(); ++i)
   {
     KGBElt x=subset[i];
-    standardrepk::StandardRepK sr=khc.std_rep(rd.twoRho(),kgb.titsElt(x));
+    StandardRepK sr=khc.std_rep(rd.twoRho(),kgb.titsElt(x));
     standardrepk::combination c=khc.standardize(sr);
     if ((max_l-kgb.length(x))%2 == 0)
       sum += c;
@@ -497,7 +497,7 @@ void Ktypeform_f()
 
   standardrepk::KhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
 
   {
     size_t witness;
@@ -561,7 +561,7 @@ void qKtypeform_f()
 
   standardrepk::qKhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
 
   {
     size_t witness;
@@ -620,7 +620,7 @@ void Ktypemat_f()
 
   standardrepk::KhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
   khc.normalize(sr);
 
   {
@@ -705,7 +705,7 @@ void qKtypemat_f()
 
   standardrepk::qKhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
 
   {
     size_t witness;
@@ -861,7 +861,7 @@ void branch_f()
 
   standardrepk::KhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
 
   {
     size_t witness;
@@ -916,7 +916,7 @@ void qbranch_f()
 
   standardrepk::qKhatContext khc(G);
 
-  standardrepk::StandardRepK sr=interactive::get_standardrep(khc);
+  StandardRepK sr=interactive::get_standardrep(khc);
 
   {
     size_t witness;
@@ -993,7 +993,7 @@ void srtest_f()
 			    G.rank());
   standardrepk::KhatContext khc(G);
 
-  standardrepk::StandardRepK sr=khc.std_rep_rho_plus(lambda,kgb.titsElt(x));
+  StandardRepK sr=khc.std_rep_rho_plus(lambda,kgb.titsElt(x));
 
   (lambda *= 2) += G.rootDatum().twoRho();
   prettyprint::printVector(std::cout << "Weight (1/2)",lambda);
@@ -1107,10 +1107,10 @@ void iblock_f()
   ioutils::OutputFile f;
   f << "Infinitesimal character is " << gamma << std::endl;
 
-  SubSystem sub = SubSystem::integral(rd,gamma);
+  SubSystemWithGroup sub = SubSystemWithGroup::integral(rd,gamma);
 
   WeylWord ww;
-  weyl::Twist twist = sub.twist(theta,ww);
+  sub.twist(theta,ww); // resulting |weyl::Twist| is unused, but |ww| is set
 
   Permutation pi;
 
@@ -1133,32 +1133,19 @@ void iblock_f()
     << " of the following block:" << std::endl;
 
   block.print_to(f,false);
-
 } // |iblock_f|
 
 void nblock_f()
 {
   RealReductiveGroup& GR = realmode::currentRealGroup();
-  ComplexReductiveGroup& G = GR.complexGroup();
-  const RootDatum& rd = G.rootDatum();
 
   Weight lambda_rho;
   RatWeight gamma(0);
   KGBElt x;
 
   SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
-  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
-  lambda.normalize();
 
   ioutils::OutputFile f;
-  f << "x = " << x << ", gamma = " << gamma
-    << ", lambda = " << lambda << std::endl;
-
-  WeightInvolution theta =
-    GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
-
-  WeylWord ww;
-  weyl::Twist twist = sub.twist(theta,ww);
 
   Permutation pi;
 
@@ -1174,78 +1161,30 @@ void nblock_f()
 	<< (s<sub.rank()-1 ? "," : ".\n");
   }
 
+  Rep_context rc(GR);
+  StandardRepr sr = rc.sr(x,lambda_rho,gamma);
+
   BlockElt z;
-  blocks::non_integral_block block(GR,sub,x,lambda,gamma,z);
+  non_integral_block block(GR,sr,z);
 
   f << "Given parameters define element " << z
     << " of the following block:" << std::endl;
 
   block.print_to(f,false);
-  kl::KLContext klc(block);
-  klc.fill(z,false); // silent filling of the KL table
-
-  typedef Polynomial<int> Poly;
-  typedef std::map<BlockElt,Poly> map_type;
-  map_type acc; // non-zero $x'\mapsto\sum_{x\downarrow x'}\eps(z/x)P_{x,z}$
-  unsigned int parity = block.length(z)%2;
-  for (size_t x = 0; x <= z; ++x)
-  {
-    const kl::KLPol& pol = klc.klPol(x,z);
-    if (not pol.isZero())
-    {
-      Poly p(pol); // convert
-      if (block.length(x)%2!=parity)
-	p*=-1;
-      BlockEltList nb=block.nonzeros_below(x);
-      for (size_t i=0; i<nb.size(); ++i)
-      {
-	std::pair<map_type::iterator,bool> trial =
-	  acc.insert(std::make_pair(nb[i],p));
-	if (not trial.second) // failed to create a new entry
-	  trial.first->second += p;
-      } // |for (i)| in |nb|
-    } // |if(pol!=0)|
-  } // |for (x<=z)|
-
-
-  f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
-    << "KL polynomials (-1)^{l(" << z << ")-l(x)}*P_{x," << z << "}:\n";
-  int width = ioutils::digits(z,10ul);
-  for (map_type::const_iterator it=acc.begin(); it!=acc.end(); ++it)
-  {
-    BlockElt x = it->first;
-    const Poly& pol = it->second;
-    if (not pol.isZero())
-    {
-      f << std::setw(width) << x << ": ";
-      prettyprint::printPol(f,pol,"q") << std::endl;
-    }
-  }
+  block_io::print_KL(f,block,z);
 } // |nblock_f|
 
 void deform_f()
 {
   RealReductiveGroup& GR = realmode::currentRealGroup();
-  ComplexReductiveGroup& G = GR.complexGroup();
-  const RootDatum& rd = G.rootDatum();
 
   Weight lambda_rho;
   RatWeight gamma(0);
   KGBElt x;
 
   SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
-  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
-  lambda.normalize();
 
   ioutils::OutputFile f;
-  f << "x = " << x << ", gamma = " << gamma
-    << ", lambda = " << lambda << std::endl;
-
-  WeightInvolution theta =
-    GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
-
-  WeylWord ww;
-  weyl::Twist twist = sub.twist(theta,ww);
 
   Permutation pi;
 
@@ -1261,166 +1200,65 @@ void deform_f()
 	<< (s<sub.rank()-1 ? "," : ".\n");
   }
 
+  Rep_table rt(GR);
+  StandardRepr sr = rt.sr(x,lambda_rho,gamma);
+
   BlockElt entry_elem;
-  blocks::non_integral_block block(GR,sub,x,lambda,gamma,entry_elem);
+  non_integral_block block(GR,sr,entry_elem);
 
   f << "Given parameters define element " << entry_elem
     << " of the following block:" << std::endl;
 
   block.print_to(f,false);
-  kl::KLContext klc(block);
-  klc.fill(entry_elem,false); // silent filling of the KL table
 
-  std::vector<BlockElt> non_zeros; non_zeros.reserve(entry_elem+1);
-  for (BlockElt x=0; x<=entry_elem; ++x)
-    if (block.is_nonzero(x))
-      non_zeros.push_back(x);
+  repr::SR_poly terms = rt.deformation_terms(block,entry_elem);
 
-  BlockElt nnz = non_zeros.size(); // |BlockElt| indexes singlular "block"
-
-  repr::Rep_context RC(GR);
-  std::vector<unsigned int> orient_nr(nnz);
-  for (BlockElt z=0; z<nnz; ++z)
-  {
-    BlockElt zz=non_zeros[z];
-    repr::StandardRepr r =
-      RC.sr(block.parent_x(zz),block.lambda_rho(zz),gamma);
-    orient_nr[z] = RC.orientation_number(r);
-  }
-
-  typedef Polynomial<int> Poly;
-  typedef matrix::Matrix_base<Poly> PolMat;
-
-  PolMat P(nnz,nnz,Poly(0)), Q(nnz,nnz,Poly(0));
-
-  for (BlockElt z=nnz; z-->0; )
-  {
-    BlockElt zz=non_zeros[z];
-    unsigned int parity = block.length(zz)%2;
-    for (BlockElt xx=0; xx <= zz; ++xx)
-    {
-      const kl::KLPol& pol = klc.klPol(xx,zz);
-      if (not pol.isZero())
-      {
-	Poly p(pol); // convert
-	if (block.length(xx)%2!=parity)
-	  p*=-1;
-	BlockEltList nb=block.nonzeros_below(xx);
-	for (size_t i=0; i<nb.size(); ++i)
-	{
-	  BlockElt x = std::lower_bound
-	    (non_zeros.begin(),non_zeros.end(),nb[i])-non_zeros.begin();
-	  assert(non_zeros[x]==nb[i]); // found
-	  if (P(x,z).isZero())
-	    P(x,z)=p;
-	  else
-	    P(x,z)+=p;
-	} // |for (i)| in |nb|
-      } // |if(pol!=0)|
-    } // |for (x<=z)|
-  } // for |z|
-
-    // now compute polynomials $Q_{x,z}$, for |y<=z<=entry_elem|
-  for (BlockElt x=0; x<nnz; ++x)
-  {
-    Q(x,x)=Poly(1);
-    for (BlockElt z=x+1; z<nnz; ++z)
-    {
-      Poly sum; // initially zero; $-\sum{x\leq y<z}Q_{x,y}P^\pm_{y,z}$
-      for (BlockElt y=x; y<z; ++y)
-	sum -= Q(x,y)*P(y,z);
-      Q(x,z)=sum;
-    }
-  }
-
-  f << (block.singular_simple_roots().any() ? "(cumulated) " : "")
-    << "KL polynomials (-1)^{l(y)-l(x)}*P_{x,y}:\n";
-  int width = ioutils::digits(entry_elem,10ul);
-  for (BlockElt y=0; y<nnz; ++y)
-    for (BlockElt x=0; x<=y; ++x)
-      if (not P(x,y).isZero())
-      {
-	f << std::setw(width) << non_zeros[x] << ',' << non_zeros[y] << ": ";
-	prettyprint::printPol(f,P(x,y),"q") << std::endl;
-      }
-
-  f << "dual KL polynomials Q_{x,y}:\n";
-  for (BlockElt y=0; y<nnz; ++y)
-    for (BlockElt x=0; x<=y; ++x)
-    {
-      Poly& pol = Q(x,y);
-      if (not pol.isZero())
-      {
-	f << std::setw(width) << non_zeros[x] << ',' << non_zeros[y] << ": ";
-	prettyprint::printPol(f,pol,"q") << std::endl;
-      }
-    }
+  std::vector<StandardRepr> pool;
+  HashTable<StandardRepr,unsigned long> hash(pool);
 
   f << "Orientation numbers:\n";
-  for (BlockElt y=0; y<nnz; ++y)
-    f << non_zeros[y] << ": " << orient_nr[y] << (y+1<nnz ? ", " : ".\n");
-
-  if (block.is_nonzero(entry_elem))
-  {
-    BlockElt z=nnz-1;
-    assert(non_zeros[z]==entry_elem);
-    unsigned odd = (block.length(entry_elem)+1)%2; // opposite to |entry_elem|
-
-    Poly s(1,1); // in fact $X$, will reduce modulo $X^2+1$ later
-    f << "Deformation terms for I(" << entry_elem << ")_c:\n";
-    for (BlockElt x=nnz-1; x-->0; ) // skip |entry_elem|
+  bool first=true;
+  for (BlockElt x=0; x<=entry_elem; ++x)
+    if (block.survives(x))
     {
-      Poly sum;
-      for (BlockElt y=x; y<nnz-1; ++y)
-	if (block.length(non_zeros[y])%2==odd)
-	  sum += P(x,y)*Q(y,z);
-      // now evaluate |sum| at $X=-1$ to get "real" part of $(1-s)*sum[X:=s]$
-      int eval=0;
-      for (polynomials::Degree d=sum.size(); d-->0; )
-	eval = sum[d]-eval;
-
-      // if (orientation_difference(x,z)) sum*=s;
-      int orient_exp = (orient_nr[nnz-1]-orient_nr[x])/2;
-      if (orient_exp%2!=0)
-	eval = -eval;
-
-      if (eval!=0)
-      {
-	f << " +(" << std::resetiosflags(std::ios_base::showpos) << eval;
-	if (eval==1 or eval==-1)
-	  f << (eval==1 ? '-' : '+'); // sign of |-eval|
-	else
-	  f << std::setiosflags(std::ios_base::showpos) << -eval;
-	f <<"s)I(" << non_zeros[x] << ")_c";
-      }
+      hash.match(rt.sr(block,x));
+      if (first) first=false;
+      else f<< ", ";
+      StandardRepr r = rt.sr(block,x);
+      f << x << ": " <<  rt.orientation_number(r);
     }
-    static_cast<std::ostream&>(f) << std::endl;
+  f << ".\n";
+
+  if (block.survives(entry_elem))
+  {
+    f << "Deformation terms for I(" << entry_elem << ")_c: (1-s) times\n";
+    std::ostringstream os;
+    for (repr::SR_poly::const_iterator it=terms.begin(); it!=terms.end(); ++it)
+    {
+      int eval=it->second.e();
+      os << ' ';
+      if (eval==1 or eval==-1)
+	os << (eval==1 ? '+' : '-'); // sign of evaluation
+      else
+	os << std::setiosflags(std::ios_base::showpos) << eval;
+      os <<"I(" << hash.find(it->first) << ")_c";
+    }
+    ioutils::foldLine(f,os.str()) << std::endl;
+
   }
 } // |deform_f|
 
 void partial_block_f()
 {
   RealReductiveGroup& GR = realmode::currentRealGroup();
-  ComplexReductiveGroup& G = GR.complexGroup();
-  const RootDatum& rd = G.rootDatum();
 
   Weight lambda_rho;
   RatWeight gamma(0);
   KGBElt x;
 
   SubSystem sub = interactive::get_parameter(GR,x,lambda_rho,gamma);
-  RatWeight lambda(lambda_rho *2 + rd.twoRho(),2);
-  lambda.normalize();
 
   ioutils::OutputFile f;
-  f << "x = " << x << ", gamma = " << gamma
-    << ", lambda = " << lambda << std::endl;
-
-  WeightInvolution theta =
-    GR.complexGroup().involutionMatrix(GR.kgb().involution(x));
-
-  WeylWord ww;
-  weyl::Twist twist = sub.twist(theta,ww);
 
   Permutation pi;
 
@@ -1436,8 +1274,12 @@ void partial_block_f()
 	<< (s<sub.rank()-1 ? "," : ".\n");
   }
 
-  blocks::non_integral_block block(GR,sub,x,lambda,gamma);
+  Rep_context rc(GR);
+  StandardRepr sr = rc.sr(x,lambda_rho,gamma);
+
+  blocks::non_integral_block block(rc,sr);
   block.print_to(f,false);
+  block_io::print_KL(f,block,block.size()-1);
 } // |partial_block_f|
 
 
@@ -1450,11 +1292,11 @@ TorusElement torus_part
 {
   InvolutionData id(rd,theta);
   Weight cumul(rd.rank(),0);
-  LatticeCoeff n=gamma.denominator();
-  Weight v=gamma.numerator();
+  arithmetic::Numer_t n=gamma.denominator();
+  const Ratvec_Numer_t& v=gamma.numerator();
   const RootNbrSet pos_real = id.real_roots() & rd.posRootSet();
   for (RootNbrSet::iterator it=pos_real.begin(); it(); ++it)
-    if (v.dot(rd.coroot(*it)) %n !=0) // nonintegral
+    if (rd.coroot(*it).dot(v) %n !=0) // nonintegral
       cumul+=rd.root(*it);
   // now |cumul| is $2\rho_\Re(G)-2\rho_\Re(G(\gamma))$
 
@@ -1492,7 +1334,7 @@ void embedding_f()
   ioutils::OutputFile f;
   f << "Infinitesimal character is " << gamma << std::endl;
 
-  SubSystem sub = SubSystem::integral(rd,gamma);
+  SubSystemWithGroup sub = SubSystemWithGroup::integral(rd,gamma);
 
   WeylWord ww;
   const tits::SubTitsGroup sub_gTg
@@ -1513,7 +1355,7 @@ void embedding_f()
   f << "Twisted involution in subsystem: " << ww << ".\n";
 
   weyl::TI_Entry::Pooltype pool;
-  hashtable::HashTable<weyl::TI_Entry,unsigned int> hash_table(pool);
+  HashTable<weyl::TI_Entry,unsigned int> hash_table(pool);
   std::vector<unsigned int> stops;
   {
     std::vector<TwistedInvolution> queue(1,TwistedInvolution());
@@ -1556,54 +1398,25 @@ void embedding_f()
 void test_f()
 {
   RealReductiveGroup& GR = realmode::currentRealGroup();
-  ComplexReductiveGroup& G = GR.complexGroup();
-  const RootDatum& rd = G.rootDatum();
 
-  RatWeight nu=
-    interactive::get_ratweight
-    (interactive::sr_input(),"rational weight nu: ",rd.rank());
+  Weight lambda_rho;
+  RatWeight nu(0);
+  KGBElt x;
 
-  const KGB& kgb = GR.kgb();
-  unsigned long x=interactive::get_bounded_int
-    (interactive::common_input(),"KGB element: ",kgb.size());
+  SubSystem sub=interactive::get_parameter(GR,x,lambda_rho,nu);
+  Rep_context rc(GR);
+  StandardRepr sr = rc.sr(x,lambda_rho,nu);
 
-  WeightInvolution theta = G.involutionMatrix(kgb.involution(x));
+  ioutils::OutputFile f;
 
-  nu = RatWeight
-    (nu.numerator() - theta*nu.numerator(),2*nu.denominator());
+  BlockElt z;
+  non_integral_block block(GR,sr,z);
 
-  std::cout << "Made -theta fixed, nu = " << nu << std::endl;
-  RatWeight gamma(rd.twoRho()+theta*rd.twoRho(),4);
-  // assume |lambda=rho| for a valid value
-  gamma += nu;
-  std::cout << "added discrete series contribution, gamma = " << gamma
-	    << std::endl;
+  f << "Given parameters define element " << z
+    << " of the following block:" << std::endl;
 
-  subdatum::SubDatum sub (GR,gamma,x);
-
-  WeylWord ww;
-  weyl::Twist twist = sub.twist(theta,ww);
-
-  Permutation pi;
-
-  std::cout << "Subsystem on dual side is ";
-  if (sub.semisimple_rank()==0)
-    std::cout << "empty.\n";
-  else
-  {
-    std::cout << "of type "
-	      << dynkin::Lie_type(sub.cartanMatrix(),true,false,pi)
-	      << ", with roots ";
-    for (weyl::Generator s=0; s<sub.semisimple_rank(); ++s)
-      std::cout << sub.parent_nr_simple(pi[s])
-		<< (s<sub.semisimple_rank()-1 ? "," : ".\n");
-  }
-
-  std::cout << "Twisted involution in subsystem: " << ww << std::endl;
-
-  kgb::subsys_KGB sub_KGB(kgb,sub,x);
-
-  kgb_io::print(std::cout,sub_KGB);
+  block.print_to(f,false);
+  block_io::print_KL(f,block,z);
 } // |test_f|
 
 

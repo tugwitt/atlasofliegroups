@@ -1,13 +1,12 @@
-/*!
-\file
-\brief
-Class definitions and function declarations for the class KLContext.
-*/
 /*
   This is kl.h
 
+  Class definitions and function declarations for the class KLContext.
+
+
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  Copyright 2012 David Vogan, Marc van Leeuwen
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -16,6 +15,7 @@ Class definitions and function declarations for the class KLContext.
 #define KL_H
 
 #include <limits>
+#include <set>
 
 #include "atlas_types.h"
 
@@ -23,15 +23,6 @@ Class definitions and function declarations for the class KLContext.
 #include "polynomials.h"// containment
 
 namespace atlas {
-
-/******** constant declarations *********************************************/
-
-namespace kl {
-
-extern const KLPol Zero;
-
-
-} // namespace kl
 
 /******** function declarations *********************************************/
 
@@ -45,114 +36,81 @@ namespace kl {
 
 /* Namely: the definition of KLContext itself */
 
-
 namespace kl {
 
-  /*!
+typedef std::vector<std::pair<BlockElt,MuCoeff> > MuRow;
+
+class KLPolEntry;
+/*!
 \brief Calculates and stores the Kazhdan-Lusztig polynomials for a
-block of representations of G.
+  block of representations of G.
   */
 class KLContext
   : public klsupport::KLSupport // base is needed for full functionality
 {
 
- protected:  // permit access of our Helper class to the data members
+  BlockElt fill_limit; // all "rows" |y| with |y<fill_limit| have been computed
 
-  /*!
-\brief Bit 0 flags whether the KL polynomials have
-all been computed.
-  */
-  BlockElt fill_limit; // all "rows" |y| with |y<fill_limit| computed
-
-  /*!
-\brief Entry d_prim[y] is a list of the elements x_i that are primitive
-with respect to y and have P_{y,x_i} not zero.
-  */
+/*!
+  \brief Entry d_prim[y] is a list of the elements x_i that are primitive
+  with respect to y and have P_{y,x_i} not zero.
+*/
   std::vector<PrimitiveRow> d_prim;
 
-  /*!
-\brief Entry d_kl[y] is a list of pointers to the polynomials
-P_{y,x_i}, numbered as in the list d_prim[y].
-  */
+/*
+  $d_kl[y]$ is a list of indices into |d_hashtable| of polynomials
+  $P_{x_i,y}$ with $x_i=d_prim[i]$
+*/
   std::vector<KLRow> d_kl;           // list of polynomial pointers
 
-  /*!
-\brief Entry d_mu[y] is a MuRow, which has parallel vectors for x and mu(x,y)
-  */
-  std::vector<MuRow> d_mu;           // lists of x's and their mu-coefficients
+/*!
+  \brief Entry d_mu[y] is a MuRow, which has parallel vectors for x and mu(x,y)
+*/
+ std::vector<MuRow> d_mu;           // lists of x's and their mu-coefficients
 
-  /*!
-\brief Set of KL polynomials.
-  */
-  KLStore d_store;           // the distinct actual polynomials
-  /*!
-\brief Pointer to the polynomial 0.
-  */
-  KLIndex d_zero;
-  /*!
-\brief Pointer to the polynomial 1.
-  */
-  KLIndex d_one;
+  KLStore d_store; // the distinct actual polynomials
 
-// copy and swap are only for helper class
+  // the constructors will ensure that |d_store| contains 0, 1 at beginning
+  enum { d_zero = 0, d_one  = 1}; // indices of polynomials 0,1 in |d_store|
+  // using enum rather than |static const int| allows implicit const references
+
+ private:  // copy and assignment are not needed, and forbidden
   KLContext(const KLContext&);
-
-  void swap(KLContext&); // needed internally in helper class
-
- private:
-  KLContext& operator= (const KLContext&); // assignment is not needed at all
+  KLContext& operator= (const KLContext&);
 
  public:
 
 // constructors and destructors
-  KLContext(Block_base&); // initial base object
+  KLContext(const Block_base&); // construct initial base object
 
 // accessors
-  // the following two were moved here from the Helper class
-  void makeExtremalRow(PrimitiveRow& e, BlockElt y) const;
-
-  void makePrimitiveRow(PrimitiveRow& e, BlockElt y) const;
-
-  /*!
-\brief List of the elements x_i that are primitive with respect to y and have
- P_{y,x_i} NOT ZERO. This method is somewhat of a misnomer
-  */
-  const PrimitiveRow& primitiveRow(BlockElt y) const
-    { return d_prim[y]; }
+  // construct lists of extremal respectively primitive elements for |y|
+  PrimitiveRow extremalRow(BlockElt y) const;
+  PrimitiveRow primitiveRow(BlockElt y) const;
 
   bool isZero(const KLIndex p) const { return p == d_zero; }
 
-  /*!
-\brief The Kazhdan-Lusztig-Vogan polynomial P_{x,y}
-*/
+  // A constant reference to the Kazhdan-Lusztig-Vogan polynomial P_{x,y}
   KLPolRef klPol(BlockElt x, BlockElt y) const;
 
-  /*!
-\brief Returns the list of pointers to the non-zero KL polynomials
-P_{y,x_i} (with x_i primitive with respect to y).
-  */
-  const KLRow& klRow(BlockElt y) const {
-    return d_kl[y];
-  }
+  // That polynomial in the form of an index into |polStore()==d_store|
+  KLIndex KL_pol_index(BlockElt x, BlockElt y) const;
 
-  MuCoeff mu(BlockElt x, BlockElt y) const;
+/*!
+  Returns the list of pointers to the non-zero KL polynomials
+  P_{x_i,y} (with x_i = d_prim[i] primitive with respect to y).
+*/
+  const KLRow& klRow(BlockElt y) const { return d_kl[y]; }
 
-  /*!
-\brief List of MuData, which are pairs (x, top degree coefficient of
-P_{y,x}).
-  */
-  const MuRow& muRow(BlockElt y) const {
-    return d_mu[y];
-  }
+  MuCoeff mu(BlockElt x, BlockElt y) const; // $\mu(x,y)$
 
-  /*!
-\brief Returns the set of all non-zero KL polynomials for the block.
-  */
-  const KLStore& polStore() const {
-    return d_store;
-  }
+  // List of nonzero $\mu(x,y)$ for |y|, as pairs $(x,\mu(x,y))$
+  const MuRow& muRow(BlockElt y) const { return d_mu[y]; }
 
-// get bitmap of primitive elements for row |y| with nonzero KL polynomial
+  // List of all non-zero KL polynomials for the block, in generation order
+  const KLStore& polStore() const { return d_store; }
+
+  // get bitmap of primitive elements for row |y| with nonzero KL polynomial
   BitMap primMap (BlockElt y) const;
 
 // manipulators
@@ -160,9 +118,47 @@ P_{y,x}).
   // partial fill, up to and including the "row" of |y|
   void fill(BlockElt y, bool verbose=true);
 
-  void fill() { fill(size()-1); } // simulate forbidden default argument
+  void fill(bool verbose=true)
+  { fill(size()-1,verbose); } // simulate forbidden first default argument
 
- }; //class KLContext
+
+  // private methods used during construction
+ private:
+  typedef HashTable<KLPolEntry,KLIndex> KLHash;
+
+  //accessors
+    weyl::Generator firstDirectRecursion(BlockElt y) const;
+    weyl::Generator first_nice_and_real(BlockElt x,BlockElt y) const;
+    std::pair<weyl::Generator,weyl::Generator>
+      first_endgame_pair(BlockElt x, BlockElt y) const;
+    BlockEltPair inverseCayley(size_t s, BlockElt y) const;
+    std::set<BlockElt> down_set(BlockElt y) const;
+
+    KLPolRef klPol(BlockElt x, BlockElt y,
+		   KLRow::const_iterator klv,
+		   PrimitiveRow::const_iterator p_begin,
+		   PrimitiveRow::const_iterator p_end) const;
+
+    // manipulators
+    // the |size_t| results serve only for statistics; caller may ignore them
+    void silent_fill(BlockElt last_y);
+    void verbose_fill(BlockElt last_y);
+
+    size_t fillKLRow(BlockElt y, KLHash& hash);
+    void recursionRow(std::vector<KLPol> & klv,
+		      const PrimitiveRow& e, BlockElt y, size_t s);
+    void muCorrection(std::vector<KLPol>& klv,
+		      const PrimitiveRow& e,
+		      BlockElt y, size_t s);
+    size_t writeRow(const std::vector<KLPol>& klv,
+		    const PrimitiveRow& e, BlockElt y, KLHash& hash);
+    size_t remove_zeros(const KLRow& klv,
+			const PrimitiveRow& e, BlockElt y);
+    void newRecursionRow(KLRow & klv,const PrimitiveRow& pr,
+			 BlockElt y, KLHash& hash);
+    KLPol muNewFormula(BlockElt x, BlockElt y, size_t s, const MuRow& muy);
+
+}; //class KLContext
 
 } // |namespace kl|
 

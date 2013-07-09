@@ -6,7 +6,7 @@
   This is blocks.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -20,7 +20,7 @@
 #include "ratvec.h"	// containment infinitesimal character
 
 #include "atlas_types.h"
-#include "tits.h"	// representative of $y$ in |non_integeral_block|
+#include "tits.h"	// representative of $y$ in |non_integral_block|
 #include "descents.h"	// inline methods
 
 
@@ -61,8 +61,6 @@ class Block_base {
 
  protected: // all other fields may be set in a derived class contructor
 
-  const TwistedWeylGroup& tW; // reference is used here only for printing
-
   // relation to |KGB| sets (which may or may not be stored explicitly)
   KGBEltList d_x; // of size |size()|; defines an 'x-coordinate' of elements
   KGBEltList d_y; // of size |size()|; defines an 'y-coordinate' of elements
@@ -76,23 +74,32 @@ class Block_base {
   DescentStatusList d_descent; // of size |size()|
   std::vector<unsigned short> d_length; // of size |size()|
 
+  // possible tables of Bruhat order and Kazhdan-Lusztig polynomials
+  BruhatOrder* d_bruhat;
+  kl::KLContext* klc_ptr;
+
  public:
 
 // constructors and destructors
   Block_base(const KGB& kgb,const KGB& dual_kgb);
-  Block_base(const SubSystem& sub, const TwistedWeylGroup& printing_W);
+  Block_base(unsigned int rank); // only dimensions some vectors
 
-  virtual ~Block_base() {}
+  virtual ~Block_base(); // deletes |d_bruhat| and |klc_ptr| (if non-NULL)
 
 // copy, assignment and swap
+
+  Block_base(const Block_base& b); // implemented but never used (optimized out)
+ private:
+  Block_base& operator=(const Block_base& b); // not implemented
+ public:
 
 // accessors
 
   size_t rank() const { return d_cross.size(); } // semisimple rank matters
   size_t size() const { return d_x.size(); }
 
-  virtual size_t xsize() const = 0;
-  virtual size_t ysize() const = 0;
+  virtual KGBElt xsize() const = 0;
+  virtual KGBElt ysize() const = 0;
 
   KGBElt x(BlockElt z) const { assert(z<size()); return d_x[z]; }
   KGBElt y(BlockElt z) const { assert(z<size()); return d_y[z]; }
@@ -103,8 +110,6 @@ class Block_base {
   size_t length(BlockElt z) const { return d_length[z]; }
 
   BlockElt length_first(size_t l) const; // first element of given length
-
-  virtual const TwistedInvolution& involution(BlockElt z) const = 0;
 
   BlockElt cross(size_t s, BlockElt z) const //!< cross action
   { assert(z<size()); assert(s<rank()); return d_cross[s][z]; }
@@ -152,13 +157,23 @@ class Block_base {
   std::ostream& print_to
     (std::ostream& strm,bool as_invol_expr) const; // defined in |block_io|
 
-  // print derivated class specific information  for |z| (used in |print_on|)
-  virtual std::ostream& print(std::ostream& strm, BlockElt z) const =0;
+  // print derivated class specific information  for |z| (used in |print_to|)
+  virtual std::ostream& print
+    (std::ostream& strm, BlockElt z,bool as_invol_expr) const =0;
+
+  // manipulators
+  BruhatOrder& bruhatOrder() { fillBruhat(); return *d_bruhat; }
+  kl::KLContext& klc(BlockElt last_y, bool verbose)
+  { fill_klc(last_y,verbose); return *klc_ptr; }
 
  protected:
   // a method to straighten out blocks generated in some non standard order
   // renumber |x| through |new_x|, then order increasingly, set |first_z_of_x|
   KGBElt renumber_x(const std::vector<KGBElt>& new_x);
+
+ private:
+  void fillBruhat();
+  void fill_klc(BlockElt last_y,bool verbose);
 
 }; // |class Block_base|
 
@@ -186,12 +201,12 @@ the requirement that $theta_y$ is the negative transpose of $theta_x$.
   */
 class Block : public Block_base
 {
-
-  enum State { BruhatConstructed, NumStates };
+  const TwistedWeylGroup& tW; // reference is used here only for printing
 
   size_t xrange;
   size_t yrange;
 
+  // wasteful fields, but we cannot lean on |KGB|, which might no longer exist
   std::vector<size_t> d_Cartan; // of size |size()|
   TwistedInvolutionList d_involution; // of size |size()|
 
@@ -200,19 +215,6 @@ class Block : public Block_base
   */
   std::vector<RankFlags> d_involutionSupport; // of size |size()|
 
-  /*!
-\brief Records state bits (in fact one: whether the Bruhat order is computed).
-  */
-  BitSet<NumStates> d_state;
-
-  /*!
-\brief Bruhat order on the block.
-
-Definition now corrected mathematically from the bad definition of
-Vogan's Park City notes to one equivalent to the transitive closure of
-non-vanishing KL polynomial.
-  */
-  BruhatOrder* d_bruhat;
 
  public:
 
@@ -225,21 +227,21 @@ non-vanishing KL polynomial.
   static Block build // pseudo contructor with stored KGB sets
     (RealReductiveGroup& G_R, RealReductiveGroup& dG_R);
 
-  ~Block(); // |delete d_bruhat;| but that does not compile here
+  ~Block() {}
 
 // copy, assignment and swap
-  Block(const Block& b); // copy contructor must handle |d_bruhat|
+  Block(const Block& b); // copy contructor, must be accessible, but is unused
  private:
   Block& operator=(const Block& b); // we don't however need to assign
  public:
 
 // accessors
 
-  const TwistedWeylGroup& twistedWeylGroup() const // for |printBlockU|
-  { return tW; }
+  const TwistedWeylGroup& twistedWeylGroup() const { return tW; }
+  const WeylGroup& weylGroup() const { return tW.weylGroup(); }
 
-  virtual size_t xsize() const { return xrange; }
-  virtual size_t ysize() const { return yrange; }
+  virtual KGBElt xsize() const { return xrange; }
+  virtual KGBElt ysize() const { return yrange; }
 
   size_t Cartan_class(BlockElt z) const
     { assert(z<size()); return d_Cartan[z]; }
@@ -262,20 +264,14 @@ non-vanishing KL polynomial.
     return d_involutionSupport[z];
   }
 
-  virtual // defined in block_io.cpp
-    std::ostream& print(std::ostream& strm, BlockElt z) const;
+  virtual std::ostream& print // defined in block_io.cpp
+   (std::ostream& strm, BlockElt z,bool as_invol_expr) const;
 
-  // manipulators
-  BruhatOrder& bruhatOrder()
-  {
-    fillBruhat(); return *d_bruhat;
-  }
 
   // private accessor and manipulators
 private:
   void compute_supports(); // used during construction
 
-  void fillBruhat();
 }; // |class Block|
 
 
@@ -298,7 +294,7 @@ class gamma_block : public Block_base
 
  public:
   gamma_block(RealReductiveGroup& GR,
-	      const SubSystem& sub,
+	      const SubSystemWithGroup& sub,
 	      KGBElt x,			// starting |x| value
 	      const RatWeight& lambda,	// discrete parameter
 	      const RatWeight& gamma,	// infinitesimal character
@@ -306,16 +302,17 @@ class gamma_block : public Block_base
 	      );
 
   // virtual methods
-  size_t xsize() const { return kgb_nr_of.size(); } // child |x| range
-  size_t ysize() const { return y_rep.size(); }    // child |y| range
+  virtual KGBElt xsize() const { return kgb_nr_of.size(); } // child |x| range
+  virtual KGBElt ysize() const { return y_rep.size(); }     // child |y| range
 
   const TwistedInvolution& involution(BlockElt z) const; // obtained from |kgb|
 
 
-  virtual // in block_io.cpp; prints parent |x|, |local_system()|, Cartan
-    std::ostream& print(std::ostream& strm, BlockElt z) const;
+  virtual std::ostream& print // in block_io.cpp
+   (std::ostream& strm, BlockElt z,bool as_invol_expr) const;
 
   // new methods
+  KGBElt parent_x(BlockElt z) const { return kgb_nr_of[x(z)]; }
   RatWeight local_system(BlockElt z) const // reconstruct a |lambda| from |y|
   { assert(z<size()); return y_rep[d_y[z]].log_2pi(); }
 
@@ -323,53 +320,51 @@ class gamma_block : public Block_base
 
 class non_integral_block : public Block_base
 {
-  const KGB& kgb; // on the |x| size we employ a pre-computed KGB structure
-  const ComplexReductiveGroup& G; // apart from |kgb|, use |GR.complexGroup()|
-  const SubSystem& sub;
+  RealReductiveGroup& GR; // non-const to allow construction of |Rep_context|
+  const KGB_base& kgb; // initialised to |GR.kgb()|, so can be constant
 
   RankFlags singular; // flags simple roots for which |infin_char| is singular
 
-  const RatWeight infin_char; // the infinitesimal character of the block
+  RatWeight infin_char; // inf. character, constant in block but not |const|
 
   std::vector<KGBElt> kgb_nr_of; // maps child |x| numbers to parent |kgb|
-  std::vector<GlobalTitsElement> y_info; // indexed by child |y| numbers
+  std::vector<TorusElement> y_info; // indexed by child |y| numbers
 
  public:
-  non_integral_block
-    (RealReductiveGroup& GR,
-     const SubSystem& subsys,
-     KGBElt x,			// starting |x| value
-     const RatWeight& lambda,	// discrete parameter
-     const RatWeight& gamma,	// infinitesimal character
+  non_integral_block // rewritten constructor, for full block
+    (const repr::Rep_context& rc,
+     StandardRepr sr, // by value,since it will be made dominant before use
      BlockElt& entry_element	// set to block element matching input
     );
 
-  non_integral_block // alternative constructor, for interval below |x|
-    (RealReductiveGroup& GR,
-     const SubSystem& subsys,
-     KGBElt x,			// first |x| value
-     const RatWeight& lambda,	// discrete parameter
-     const RatWeight& gamma	// infinitesimal character
-    );
+  non_integral_block // alternative constructor, for interval below |sr|
+    (const repr::Rep_context& rc,
+     StandardRepr sr); // by value,since it will be made dominant before use
+
+  // "inherited" accessors
+  const ComplexReductiveGroup& complexGroup() const;
+  const InvolutionTable& involution_table() const;
 
   // virtual methods
-  size_t xsize() const { return kgb_nr_of.size(); } // child |x| range
-  size_t ysize() const { return y_info.size(); }    // child |y| range
+  virtual KGBElt xsize() const { return kgb_nr_of.size(); } // child |x| range
+  virtual KGBElt ysize() const { return y_info.size(); }    // child |y| range
 
-  const TwistedInvolution& involution(BlockElt z) const
-  { assert(z<size()); return y_info[d_y[z]].tw(); } // this is still? |y|-based
-
-  virtual // defined in block_io.cpp
-    std::ostream& print(std::ostream& strm, BlockElt z) const;
+  virtual std::ostream& print // defined in block_io.cpp
+    (std::ostream& strm, BlockElt z,bool as_invol_expr) const;
 
   // new methods
 
+  RealReductiveGroup& realGroup() const { return GR; }
+
+  const RatWeight& gamma() const { return infin_char; }
   KGBElt parent_x(BlockElt z) const { return kgb_nr_of[x(z)]; }
+  RatWeight nu(BlockElt z) const; // "real" projection of |infin_char|
+  RatWeight y_part(BlockElt z) const; // raw torus part info, normalized
   Weight lambda_rho(BlockElt z) const; // reconstruct from y value
   RatWeight lambda(BlockElt z) const; // reconstruct from y value
   RankFlags singular_simple_roots() { return singular; }
-  bool is_nonzero(BlockElt z) const; // whether |z| survives singular |gamma|
-  BlockEltList nonzeros_below(BlockElt z) const; // reachable nonzeros
+  bool survives(BlockElt z) const; // whether $J(z_{reg})$ survives tr. functor
+  BlockEltList survivors_below(BlockElt z) const; // expression for $I(z)$
 
 }; // |class non_integral_block|
 

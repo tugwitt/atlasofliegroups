@@ -13,7 +13,7 @@
 
   Copyright (C) 2004,2005 Fokko du Cloux
   Copyright (C) 2007-2009 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -72,7 +72,7 @@ void makeHasse(std::vector<set::EltList>&, const KGB_base&);
 size_t KGB_elt_entry::hashCode(size_t modulus) const
 {
   unsigned long d= fingerprint.denominator();
-  const int_Vector& num=fingerprint.numerator();
+  const Ratvec_Numer_t& num=fingerprint.numerator();
   size_t h=tw.hashCode(modulus);
   for (size_t i=0; i<num.size(); ++i)
     h=((h*d)+num[i])&(modulus-1);
@@ -188,15 +188,15 @@ void KGB_base::add_element()
 */
 
 // create structure incorporating all KGB structures for a given inner class
-global_KGB::global_KGB(ComplexReductiveGroup& G)
-  : KGB_base(G,G.semisimpleRank())
+global_KGB::global_KGB(ComplexReductiveGroup& G_C) // |G_C| is non-|const|
+  : KGB_base(G_C,G_C.semisimpleRank())
   , Tg(G) // construct global Tits group as subobject
   , elt()
 {
-  G.involution_table().add(G,~ BitMap(G.numCartanClasses()));
-  generate_involutions(G.numInvolutions());
+  G_C.involution_table().add(G_C,~ BitMap(G.numCartanClasses()));
+  generate_involutions(G_C.numInvolutions());
 
-  size_t size = G.global_KGB_size();
+  size_t size = G_C.global_KGB_size();
   elt.reserve(size);
   KGB_base::reserve(size);
 
@@ -231,19 +231,19 @@ global_KGB::global_KGB(ComplexReductiveGroup& G)
 
 }
 
-global_KGB::global_KGB(ComplexReductiveGroup& G,
+global_KGB::global_KGB(ComplexReductiveGroup& G_C,
 		       const GlobalTitsElement& x)
-  : KGB_base(G,G.semisimpleRank())
+  : KGB_base(G_C,G_C.semisimpleRank())
   , Tg(G) // construct global Tits group as subobject
   , elt()
 {
-  generate_involutions(G.numInvolutions());
+  generate_involutions(G_C.numInvolutions());
   assert(Tg.is_valid(x)); // unless this holds, we cannot hope to succeed
 
-  Cartan_orbits& i_tab = G.involution_table();
+  Cartan_orbits& i_tab = G_C.involution_table();
   const RootDatum& rd = G.rootDatum();
 
-  i_tab.add(G,~ BitMap(G.numCartanClasses())); // generate all
+  i_tab.add(G_C,~ BitMap(G.numCartanClasses())); // generate all
 
   GlobalTitsElement a=x; // start at an element that we certainly want
   weyl::Generator s;
@@ -260,7 +260,7 @@ global_KGB::global_KGB(ComplexReductiveGroup& G,
     InvolutionNbr inv = i_tab.nr(a.tw());
     first_of_tau.push_back(0); // start of fundamental fiber
     KGB_elt_entry::Pooltype elt_pool;
-    hashtable::HashTable<KGB_elt_entry,unsigned long> elt_hash(elt_pool);
+    HashTable<KGB_elt_entry,unsigned long> elt_hash(elt_pool);
 
     elt_hash.match(i_tab.x_pack(a));
 
@@ -353,7 +353,7 @@ void global_KGB::generate(size_t predicted_size)
   const TwistedWeylGroup& W = Tg; // for when |GlobalTitsGroup| is not used
 
   KGB_elt_entry::Pooltype elt_pool; elt_pool.reserve(predicted_size);
-  hashtable::HashTable<KGB_elt_entry,KGBElt> elt_hash(elt_pool);
+  HashTable<KGB_elt_entry,KGBElt> elt_hash(elt_pool);
 
   KGBElt end_length=0; // end of the length-interval under construction
 
@@ -471,7 +471,7 @@ KGB::KGB(RealReductiveGroup& GR,
   , d_bruhat(NULL)
   , d_base(NULL)
 {
-  ComplexReductiveGroup& G=GR.complexGroup();
+  ComplexReductiveGroup& G_C=GR.complexGroup(); // non-|const| version of |G|
   //const TitsGroup& Tg = G.titsGroup();
   size_t rank = G.semisimpleRank(); // |G.rank()| does not interest us here
 
@@ -483,13 +483,13 @@ KGB::KGB(RealReductiveGroup& GR,
   }
 
   // make sure |G| has information about involutions for |Cartan_classes|
-  Cartan_orbits& i_tab = G.involution_table();
-  i_tab.add(G,Cartan_classes);
+  Cartan_orbits& i_tab = G_C.involution_table();
+  i_tab.add(G_C,Cartan_classes);
 
   tits::TE_Entry::Pooltype elt_pool; // of size |size()|
-  hashtable::HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
+  HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
 
-  size_t size = G.KGB_size(GR.realForm(),Cartan_classes);
+  size_t size = G_C.KGB_size(GR.realForm(),Cartan_classes);
 
   elt_pool.reserve(size);
   KGB_base::reserve(size);
@@ -508,7 +508,7 @@ KGB::KGB(RealReductiveGroup& GR,
       const CartanNbr cn = *it;
       TitsElt a=
 	(mins.size()==1 // use backtrack only in (unused) multiple minima case
-	 ? square_class_base.grading_seed(G,rf,cn)
+	 ? square_class_base.grading_seed(G_C,rf,cn)
 	 : square_class_base.backtrack_seed(G,rf,cn)
 	 );
 
@@ -604,7 +604,7 @@ KGB::KGB(RealReductiveGroup& GR,
     for (KGBElt x=0; x<size; ++x) // list involution indices; cannot yet use
       invs.push_back(inv_hash.find(elt_pool[x].tw())); // |involution(x)| !
 
-    a1 = permutations::standardize(invs,inv_pool.size(),&first_of_tau);
+    a1 = permutations::standardization(invs,inv_pool.size(),&first_of_tau);
   }
 
   Permutation a(a1,-1); // |a[x]| locates KGB element that should become |x|
@@ -662,6 +662,21 @@ TitsElt KGB::titsElt(KGBElt x) const
 
 size_t KGB::torus_rank() const { return titsGroup().rank(); }
 
+TorusElement KGB::torus_part_global(const RootDatum&rd, KGBElt x) const
+{
+  assert(rank()==rd.semisimpleRank());
+  RatWeight rw (rd.rank());
+  RankFlags gr = base_grading();
+  gr.complement(rank()); // take complement in set of simple roots
+  for (Grading::iterator it=gr.begin(); it(); ++it)
+    rw += rd.fundamental_coweight(*it);
+
+  TorusElement result(y_values::exp_pi(rw));
+
+  result += torus_part(x);
+  return result;
+}
+
 // Looks up a |TitsElt| value and returns its KGB number, or |size()|
 // Since KGB does not have mod space handy, must assume |a| already reduced
 KGBElt KGB::lookup(const TitsElt& a, const TitsGroup& Tg) const
@@ -715,7 +730,7 @@ class FiberData
 {
   const TitsGroup& Tits;
   weyl::TI_Entry::Pooltype pool;
-  hashtable::HashTable<weyl::TI_Entry,unsigned int> hash_table;
+  HashTable<weyl::TI_Entry,unsigned int> hash_table;
   std::vector<BinaryMap> refl; // transposed simple reflections mod 2
 
   // the following three vectors are indexed by |hash_table| sequence numbers
@@ -808,7 +823,7 @@ subsys_KGB::subsys_KGB
   }
 
   tits::TE_Entry::Pooltype elt_pool(1,tits::TE_Entry(cur_x));
-  hashtable::HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
+  HashTable<tits::TE_Entry,KGBElt> elt_hash(elt_pool);
 
   FiberData fd(Tg);
 
@@ -951,7 +966,7 @@ std::ostream& subsys_KGB::print(std::ostream& strm, KGBElt x) const
 // data: Cartan class, projector of torus parts and $\check\rho_{im}$
 GlobalFiberData::GlobalFiberData
   (ComplexReductiveGroup& G,
-   hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+   HashTable<weyl::TI_Entry,unsigned int>& h)
   : hash_table(h)
   , info(h.size())
   , refl(G.semisimpleRank())
@@ -1016,7 +1031,7 @@ GlobalFiberData::GlobalFiberData
 
 GlobalFiberData::GlobalFiberData
   (const GlobalTitsGroup& Tg,
-   hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+   HashTable<weyl::TI_Entry,unsigned int>& h)
   : hash_table(h)
   , info()
   , refl(Tg.semisimple_rank())
@@ -1034,7 +1049,7 @@ GlobalFiberData::GlobalFiberData
 
 GlobalFiberData::GlobalFiberData
   (const SubSystem& sub,
-   hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+   HashTable<weyl::TI_Entry,unsigned int>& h)
   : hash_table(h)
   , info()
   , refl(sub.rank())
@@ -1055,7 +1070,7 @@ GlobalFiberData::GlobalFiberData
 }
 
 InvInfo::InvInfo(const SubSystem& subsys,
-		 hashtable::HashTable<weyl::TI_Entry,unsigned int>& h)
+		 HashTable<weyl::TI_Entry,unsigned int>& h)
   : GlobalFiberData(subsys,h), sub(subsys), n_Cartans(0)
 {}
 
@@ -1124,7 +1139,7 @@ bool GlobalFiberData::equivalent(const GlobalTitsElement& x,
     return false;
 
   RatWeight t= (x.torus_part()-y.torus_part()).log_2pi();
-  int_Vector p = info[k].proj*t.numerator();
+  Ratvec_Numer_t p = info[k].proj*t.numerator();
 
   for (size_t i=0; i<p.size(); ++i)
     if (p[i]%t.denominator()!=0)
@@ -1140,7 +1155,7 @@ RatWeight
   unsigned int k = hash_table.find(x.tw());
   assert (k!=hash_table.empty);
   RatWeight t = x.torus_part().log_2pi();
-  int_Vector p = info[k].proj*t.numerator();
+  Ratvec_Numer_t p = info[k].proj*t.numerator();
 
   // reduce modulo integers and return
   for (size_t i=0; i<p.size(); ++i)
@@ -1323,6 +1338,18 @@ KGBElt inverse_Cayley (const KGB_base& kgb, KGBElt x,
   return kgb.cross(kgb.inverseCayley(s,kgb.cross(ww,x)).first,ww);
 }
 
+// status of |alpha| in |kgb|: conjugate to simple root follow cross actions
+gradings::Status::Value status(const KGB_base& kgb, KGBElt x,
+			       const RootSystem& rs, RootNbr alpha)
+{
+  weyl::Generator s;
+  while (alpha!=rs.simpleRootNbr(s=rs.find_descent(alpha)))
+  {
+    rs.simple_reflect_root(alpha,s);
+    x=kgb.cross(s,x);
+  }
+  return kgb.status(s,x);
+}
 
 /*****************************************************************************
 

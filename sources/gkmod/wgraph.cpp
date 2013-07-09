@@ -2,7 +2,7 @@
   This is wgraph.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -71,7 +71,7 @@ DecomposedWGraph::DecomposedWGraph(const WGraph& wg)
   : d_cell(), d_part(wg.size()), d_id(), d_induced()
 {
   Partition pi;
-  wg.cells(pi,&d_induced);
+  wg.cells(pi,&d_induced); // |OrientedGraph::cells| does the real work
 
   d_cell.reserve(pi.classCount()); // there will be this many cells
   d_id.resize(pi.classCount());    // and vectors of identification numbers
@@ -160,8 +160,8 @@ void cells(std::vector<WGraph>& wc, const WGraph& wg)
       WCoeffList& cli = wci.coeffList(z);
       for (size_t j = 0; j < el.size(); ++j) {
 	size_t x = el[j];
-	if (pi(x) != pi(y)) // an edge leading out of the current cell
-	  continue;         // ignore these
+	if (pi.class_of(x) != pi.class_of(y))
+	  continue; // ignore edge leading out of the current cell
 	// find relative address of x in this class
 	size_t xi = std::lower_bound(i->first,i->second,x) - i->first;
 	eli.push_back(xi);

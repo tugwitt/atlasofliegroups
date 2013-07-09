@@ -2,7 +2,7 @@
   This is involurions.h
 
   Copyright (C) 2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -46,9 +46,8 @@ class TorusElement
 
   // accessors
 
-  // provide access to value, but convert to "mod Z^rank" not "mod 2Z^rank"
-  RatWeight log_pi(bool normalize) const;
-  RatWeight log_2pi() const;
+  RatWeight log_pi(bool normalize) const; // return the stored rational vector
+  RatWeight log_2pi() const; // value halved: to be interpreted "mod Z^rank"
 
   // more often it will be practical to have acces to that "mod 2Z^rank" form
   const RatWeight& as_Qmod2Z() const { return repr; }
@@ -67,9 +66,12 @@ class TorusElement
 
   // this method is to be used only at weights |alpha| taking value +1 or -1
   bool negative_at(const Coweight& alpha) const
-    { return repr.scalarProduct(alpha)%2!=0; }
+  {
+    // the following asserts internally that |evaluate_at(alpha)| is integer
+    return repr.scalarProduct(alpha)%2!=0; // true if evaluates to odd integer
+  }
 
-  // evaluation giving rational number modulo 2 (|negative_at| iff equals 1)
+  // evaluation giving rational number modulo 2, represented in interval [0,2)
   Rational evaluate_at(const Coweight& alpha) const;
 
 // a method for rapidly doing imaginary cross action (for completing fiber)
@@ -83,8 +85,10 @@ class TorusElement
 
   TorusElement& operator+=(TorusPart v); // arg by value since it is small
 
-  // the following method assumes |prd| is on dual side with respect to torus
+  // in the following method |prd|, |rd| are on dual side with respect to torus
+  // in other words |repr.numerator()| is a |Weight| rather than |Coweight|
   void simple_reflect(const PreRootDatum& prd, weyl::Generator s);
+  void reflect(const RootDatum& rd, RootNbr alpha);
 }; // |class TorusElement|
 
 inline TorusElement exp_pi(const RatWeight& r) { return TorusElement(r,false); }

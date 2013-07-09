@@ -8,7 +8,7 @@ representing orbits of K on G/B.
 
   Copyright (C) 2004,2005 Fokko du Cloux
   Copyright (C) 2006-2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -34,10 +34,11 @@ namespace kgb {
 
 /*
    The following base class follows a somewhat particular design: it is not an
-   abstract base class in the sense that it has no virtual methods (and
-   therefore a fortiori no purely virtual ones), yet it is not intended to
-   have any independent instances. The point is that the base class provides
-   all methods needed for basic \emph{use}, in for instance the block
+   abstract base class in the sense that it has no purely virtual methods (in
+   the original design there were no virtual methods, but a few have been
+   added since for printing purposes), yet it is not intended to have any
+   independent instances. The point is that the base class provides all
+   methods needed for basic \emph{use}, in for instance the block
    construction, but it does not provide sufficient methods for constructing
    the KGB set. Indeed the basic constructor is made |protected| to emphasise
    that it is up to derived classes to actually fill the tables in the
@@ -79,7 +80,7 @@ class KGB_base
 
   //!\brief tables to map twisted involutions to their sequence number
   weyl::TI_Entry::Pooltype inv_pool;
-  hashtable::HashTable<weyl::TI_Entry,unsigned int> inv_hash;
+  HashTable<weyl::TI_Entry,unsigned int> inv_hash;
 
   //!\brief to help find range of elements with fixed twisted involution
   std::vector<KGBElt> first_of_tau; // size: |numInvolutions()+1|
@@ -133,7 +134,7 @@ class KGB_base
   TwistedInvolution nth_involution(unsigned int n) const
     { return inv_pool[n]; }
 
-  InvolutionNbr involution_index(KGBElt x) const
+  InvolutionNbr involution_index(KGBElt x) const // internal index of involution
   { return std::upper_bound(first_of_tau.begin(),first_of_tau.end(),x)
       -first_of_tau.begin() -1;
   }
@@ -141,7 +142,7 @@ class KGB_base
   { return inv_pool[involution_index(x)]; }
 
   const WeightInvolution & involution_matrix(KGBElt x) const;
-  InvolutionNbr inv_nr(KGBElt x) const; // external number (for inner class)
+  InvolutionNbr inv_nr(KGBElt x) const; // external number (within inner class)
 
   const DescentSet& descent(KGBElt x) const { return info[x].desc; }
   bool isDescent(weyl::Generator s, KGBElt x) const
@@ -215,7 +216,7 @@ struct KGB_elt_entry
 
 A |GlobalFiberData| object associates to each twisted involution a reduced
 description of its -1 eigenspace, which allows a quick test for equivalence of
-|GlobalTitsElement| values at this twised involution. The object also records
+|GlobalTitsElement| values at this twisted involution. The object also records
 the halfsum of the positive imaginary coroots, and the Cartan class.
 
 Originally conceived for global use within an inner class (the constructor
@@ -232,7 +233,7 @@ which will be employed from the dual side.
 class GlobalFiberData
 {
  protected: // data will also be maintained by derived class |InvInfo|
-  hashtable::HashTable<weyl::TI_Entry,unsigned int>& hash_table;
+  HashTable<weyl::TI_Entry,unsigned int>& hash_table;
 
   struct inv_info
   {
@@ -241,8 +242,9 @@ class GlobalFiberData
     Weight check_2rho_imag;
     RootNbrList simple_imag,simple_real;
 
-  inv_info() : Cartan(~0), proj(), check_2rho_imag(), simple_imag()
-    {} // allow uninitialized
+  inv_info()
+  : Cartan(~0), proj(), check_2rho_imag(), simple_imag(), simple_real()
+    {} // allow uninitialized construction
   inv_info(unsigned int c,
 	   const int_Matrix& p,
 	   const Weight& c2ri,
@@ -256,15 +258,15 @@ class GlobalFiberData
 
 public:
   GlobalFiberData(ComplexReductiveGroup& G,
-		  hashtable::HashTable<weyl::TI_Entry,unsigned int>& h);
+		  HashTable<weyl::TI_Entry,unsigned int>& h);
 
   // contructor that does not install eny Cartan classes yet
   GlobalFiberData(const GlobalTitsGroup& Tg,
-		  hashtable::HashTable<weyl::TI_Entry,unsigned int>& h);
+		  HashTable<weyl::TI_Entry,unsigned int>& h);
 
  protected: // this one is for use by |InvInfo||
   GlobalFiberData(const SubSystem& sub,
-		  hashtable::HashTable<weyl::TI_Entry,unsigned int>& h);
+		  HashTable<weyl::TI_Entry,unsigned int>& h);
  public:
 
   GlobalFiberData(const GlobalFiberData& org) // copy contructor, handle ref
@@ -313,7 +315,7 @@ struct InvInfo : public GlobalFiberData
   CartanNbr n_Cartans; // number of Cartan classes generated
 
   InvInfo(const SubSystem& subsys,
-	  hashtable::HashTable<weyl::TI_Entry,unsigned int>& h);
+	  HashTable<weyl::TI_Entry,unsigned int>& h);
 
 //manipulators
   // add involution |tw| with |Tg.involution_matrix(tw)|; report whether new
@@ -419,13 +421,20 @@ and in addition the Hasse diagram (set of all covering relations).
   RatWeight half_rho() const { return RatWeight(rootDatum().twoRho(),4); }
 
   tits::TorusPart torus_part(KGBElt x) const { return left_torus_part[x]; }
+  TorusElement torus_part_global // |torus_part| but coded as in |global_KGB|
+    (const RootDatum&rd, KGBElt x) const; // needs root datum (for base grading)
 
   TitsElt titsElt(KGBElt x) const;
   size_t torus_rank() const; // the (non-semisimple) rank of torus parts.
 
   Grading base_grading() const { return d_base->base_grading(); }
 
+  // as the name suggests, the following assumes |alpha| simple-imaginary
+  bool simple_imaginary_grading(KGBElt x,RootNbr alpha) const
+  { return d_base->simple_imaginary_grading(torus_part(x),alpha); }
+
   KGBElt lookup(const TitsElt& a, const TitsGroup& Tg) const;
+
 
 // manipulators
 
@@ -484,6 +493,8 @@ KGBElt Cayley (const KGB_base& kgb, KGBElt x,
 KGBElt inverse_Cayley (const KGB_base& kgb, KGBElt x,
 		       weyl::Generator s, const WeylWord& ww);
 
+gradings::Status::Value status(const KGB_base& kgb, KGBElt x,
+			       const RootSystem& rs, RootNbr alpha);
 
 } // |namespace kgb|
 

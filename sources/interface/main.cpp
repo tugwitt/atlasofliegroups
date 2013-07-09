@@ -2,15 +2,17 @@
   This is main.cpp
 
   Copyright (c) 2004 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups project
+  part of the Atlas of Lie Groups and Representations project
 
   For license information see the LICENSE file
 
 */
 
+#include <cstdio>   // not obviously used, but appears helpful for Windows
 #include <iostream>
 #include <stdexcept>
 #include <cstdlib> // for |exit|
+#include <cstring> // for |strcmp|
 
 #include "commands.h"
 #include "emptymode.h"
@@ -19,9 +21,22 @@
 #include "blockmode.h"
 #include "error.h"
 #include "input.h"
+#include "version.h"
+#include "io.h" // so modify message directory
 
+// This one function should not reside in the |atlas| (or any other) namespace
 int main(int argc, char* argv[])
-{ // For now, we do nothing with the arguments.
+{
+  ++argv, --argc; //we don't need to know the name we were called by; skip it
+  if (argc>0 and std::strcmp(argv[argc-1],"--version")==0)
+  {
+    std::cout << atlas::version::NAME << ' ' << atlas::version::VERSION
+	      << std::endl;
+    std::exit(0);
+  }
+  if (argc>0) // then use first argument to override message directory
+    atlas::io::MESSAGE_DIR=*argv++, --argc; // use and skip this argument
+
   try
 
   {

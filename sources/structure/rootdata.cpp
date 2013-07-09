@@ -30,7 +30,7 @@
 
   Copyright (C) 2004,2005 Fokko du Cloux
   Copyright (C) 2006--2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -136,7 +136,6 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
 {
   std::vector<Byte_vector> simple_root(rk,Byte_vector(rk));
   std::vector<Byte_vector> simple_coroot(rk,Byte_vector(rk));
-  std::vector<RootNbrList> link; // size |numPosRoots*rank|
 
   typedef std::set<Byte_vector,root_compare> RootVecSet;
   std::vector<RootVecSet> roots_of_length
@@ -154,6 +153,7 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
 
   // construct positive root list, simple reflection links, and descent sets
 
+  std::vector<RootNbrList> link; // size |numPosRoots*rank|
   RootNbrList first_l(1,0); // where level |l| starts; level 0 is empty
   for (size_t l=1; not roots_of_length[l].empty(); ++l)// empty level means end
   {
@@ -193,7 +193,7 @@ void RootSystem::cons(const int_Matrix& Cartan_matrix)
 		  link[j][i]=cur; // and install reciprocal link at |j|
 		  break;
 		}
-	    assert(link[cur][i]!=~0ul); // some value must have been set
+	    assert(link[cur][i]!=RootNbr(~0)); // some value must have been set
 	  }
 	  else // |c<0| so, reflection adding |-c| times $\alpha_j$, goes up
 	  {
@@ -1139,34 +1139,47 @@ WeightInvolution refl_prod(const RootNbrSet& rset, const RootDatum& rd)
 }
 
 
-RootDatum integrality_datum(const RootDatum& rd, const RatWeight& gamma)
+RootDatum integrality_datum(const RootDatum& rd, const RatWeight& nu)
 {
-  int n=gamma.denominator();
-  const Weight& v=gamma.numerator();
+  arithmetic::Numer_t n=nu.denominator(); // signed type!
+  const Ratvec_Numer_t& v=nu.numerator();
   RootNbrSet int_roots(rd.numRoots());
   for (size_t i=0; i<rd.numPosRoots(); ++i)
-    if (v.dot(rd.posCoroot(i))%n == 0)
+    if (rd.posCoroot(i).dot(v)%n == 0)
       int_roots.insert(rd.posRootNbr(i));
 
   return rd.sub_datum(rd.simpleBasis(int_roots));
 }
 
+unsigned int integrality_rank(const RootDatum& rd, const RatWeight& nu)
+{
+  arithmetic::Numer_t n=nu.denominator(); // signed type!
+  const Ratvec_Numer_t& v=nu.numerator();
+  RootNbrSet int_roots(rd.numRoots());
+  for (size_t i=0; i<rd.numPosRoots(); ++i)
+    if (rd.posCoroot(i).dot(v)%n == 0)
+      int_roots.insert(rd.posRootNbr(i));
+
+  return rd.simpleBasis(int_roots).size();
+}
+
 RationalList integrality_points(const RootDatum& rd, RatWeight& nu)
 {
   nu.normalize();
-  unsigned long d = nu.denominator();
+  arithmetic::Denom_t d = nu.denominator(); // unsigned type is safe here
 
-  std::set<long> products;
+  std::set<arithmetic::Denom_t> products;
   for (size_t i=0; i<rd.numPosRoots(); ++i)
   {
-    long p = abs(nu.numerator().dot(rd.posCoroot(i)));
+    arithmetic::Denom_t p = abs(rd.posCoroot(i).dot(nu.numerator()));
     if (p!=0)
       products.insert(p);
   }
 
   std::set<Rational> fracs;
-  for (std::set<long>::iterator it= products.begin(); it!=products.end(); ++it)
-    for (long s=d; s<=*it; s+=d)
+  for (std::set<arithmetic::Denom_t>::iterator
+	 it= products.begin(); it!=products.end(); ++it)
+    for (arithmetic::Denom_t s=d; s<=*it; s+=d)
       fracs.insert(Rational(s,*it));
 
   return RationalList(fracs.begin(),fracs.end());

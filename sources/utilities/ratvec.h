@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -13,7 +13,8 @@
 #define RATVEC_H
 
 #include <vector>
-#include <matrix.h>
+#include "matrix.h"
+#include "arithmetic.h"
 
 // extra defs for windows compilation -spc
 #ifdef WIN32
@@ -37,17 +38,16 @@ class RationalVector
   typedef matrix::Vector<C> V; // local abbreviation
 
   V d_num;  // vector of integers, representing the numerators
-  unsigned long d_denom; // a positive common denominator
+  arithmetic::Denom_t d_denom; // a positive common denominator
 
  public:
 
 // constructors and destructors
   explicit RationalVector(size_t r): d_num(r,0), d_denom(1){} // zero vector
 
-  /*!
-  Builds the RationalVector with numerator v and denominator d.
-  */
-  RationalVector(const V& v, C d);
+  // Build the RationalVector with numerator v and denominator d.
+  template <typename C1>
+    RationalVector(const matrix::Vector<C1>& v, C d);
 
 // accessors
   // unsigned denominator requires care: plain % or / taboo; so export signed
@@ -56,7 +56,8 @@ class RationalVector
   size_t size() const { return d_num.size(); }
 
   bool operator== (const RationalVector<C>& a) const;
-  bool operator!= (const RationalVector<C>& a) const { return not operator==(a); }
+  bool operator!= (const RationalVector<C>& a) const
+  { return not operator==(a); }
   bool operator< (const RationalVector<C>& a) const; // comparison, for STL use
 
   RationalVector<C> operator+(const RationalVector<C>& v) const;
@@ -71,6 +72,8 @@ class RationalVector
   RationalVector<C>& operator*=(C n);
   RationalVector<C>& operator/=(C n);
 
+  RationalVector<C> operator*(const arithmetic::Rational& r) const;
+
 /*
   Returns the scalar product of |*this| and |w|, which are assumed to be of
   same size and such that the scalar product is integral.
@@ -82,9 +85,10 @@ class RationalVector
   NOTE : this implementation does not worry about overflow. It is appropriate
   only for small denominators.
 */
-  C scalarProduct(const V& w) const
+  template <typename C1>
+    C scalarProduct(const matrix::Vector<C1>& w) const
   {
-    return d_num.scalarProduct(w)/(C)d_denom;
+    return w.dot(d_num)/(C)d_denom;
   }
 
 //manipulators

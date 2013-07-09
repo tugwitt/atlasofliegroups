@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -26,28 +26,29 @@ namespace arithmetic {
   template<typename I> I abs(I);
   template<typename I> I min(I,I);
   template<typename I> I max(I,I);
-  template<typename I> I divide(I, unsigned long);
-  template<typename I> unsigned long remainder(I, unsigned long);
+  template<typename I> I divide(I, Denom_t);
+  template<typename I> Denom_t remainder(I, Denom_t);
   //  template<typename I> I factorial(I); // moved to the size module
 
-  extern unsigned long dummy_gcd, dummy_Bezout;
+  extern Denom_t dummy_gcd, dummy_mult;
 
-  unsigned long gcd (long, unsigned long); // signed first argument only!
+  Denom_t gcd (Numer_t, Denom_t); // signed first argument only!
 
-  unsigned long unsigned_gcd (unsigned long, unsigned long); // avoid overload
+  // the following functions are entirely unsigned
+  Denom_t unsigned_gcd (Denom_t, Denom_t); // name choice avoids overloading
 
-  unsigned long div_gcd (unsigned long d, unsigned long a);
+  Denom_t div_gcd (Denom_t a, Denom_t b); // $a/\gcd(a,b)$
 
-  unsigned long lcm (unsigned long, unsigned long,
-		     unsigned long& =dummy_gcd, unsigned long& =dummy_Bezout);
+  Denom_t lcm (Denom_t a, Denom_t b,
+	       Denom_t& gcd=dummy_gcd, Denom_t& a_mult=dummy_mult);
   // after |lcm(a,b,d,p)| one has |d=gcd(a,b)| and |p%a==0|, |p%b==d|, |p<lcm|
 
-  unsigned long power(unsigned long base, unsigned int exponent);
+  Denom_t power(Denom_t base, unsigned int exponent);
 
   // inlined; first two arguments are supposed already reduced modulo third
-  unsigned long& modAdd(unsigned long&, unsigned long, unsigned long);
+  Denom_t modAdd(Denom_t, Denom_t, Denom_t);
 
-  unsigned long& modProd(unsigned long&, unsigned long, unsigned long);
+  Denom_t modProd(Denom_t, Denom_t, Denom_t);
 
 } // |namespace arithmetic|
 
@@ -57,14 +58,18 @@ namespace arithmetic {
 
 class Rational
 {
-  long num;
-  unsigned long denom;
+  Numer_t num;
+  Denom_t denom;
 public:
-  explicit Rational (long n=0,unsigned long d=1) : num(n), denom(d)
+  explicit Rational (Numer_t n=0,Denom_t d=1) : num(n), denom(d)
   { normalize(); }
 
-  long numerator() const            { return num; }
-  unsigned long denominator() const { return denom; }
+  Numer_t numerator() const   { return num; }
+
+  /* the C++ rule that one unsigned operand silently converts the other
+     operand to unsigned as well makes exporting denominator as unsigned too
+     error prone; e.g., floor=numerator()/denominator() would wreak havoc */
+  Numer_t denominator() const { return Numer_t(denom); }
 
   Rational operator+(Rational q) const;
   Rational operator-(Rational q) const;
@@ -79,6 +84,11 @@ public:
   Rational& operator*=(Rational q) { return operator=(operator*(q)); }
   Rational& operator/=(Rational q) { return operator=(operator/(q)); }
 
+  Rational& operator+=(Numer_t n);
+  Rational& operator-=(Numer_t n);
+  Rational& operator*=(Numer_t n);
+  Rational& operator/=(Numer_t n);
+
   bool operator==(Rational q) const { return num*q.denom==denom*q.num; }
   bool operator!=(Rational q) const { return num*q.denom!=denom*q.num; }
   bool operator<(Rational q)  const { return num*q.denom<denom*q.num; }
@@ -90,6 +100,37 @@ public:
   Rational& power(int n); // raise to power |n| and return |*this|
 
 }; // |class Rational|
+
+
+class Split_integer
+{
+  int real_part, s_part;
+ public:
+  explicit Split_integer(int a=0, int b=0) : real_part(a), s_part(b) {}
+
+  int e() const { return real_part; }
+  int s() const { return s_part; }
+
+  bool operator== (Split_integer y) const { return e()==y.e() and s()==y.s(); }
+  bool operator!= (Split_integer y) const { return not operator==(y); }
+
+  Split_integer& operator +=(Split_integer y)
+  { real_part+=y.e(); s_part+=y.s(); return *this; }
+  Split_integer& operator -=(Split_integer y)
+  { real_part-=y.e(); s_part-=y.s(); return *this; }
+  Split_integer operator +(Split_integer y) { return y+= *this; }
+  Split_integer operator -(Split_integer y) { return y.negate()+= *this; }
+  Split_integer operator -() const { return Split_integer(*this).negate(); }
+  Split_integer operator* (Split_integer y) const
+  { return Split_integer(e()*y.e()+s()*y.s(),e()*y.s()+s()*y.e()); }
+
+  Split_integer& operator*= (int n) { real_part*=n; s_part*=n; return *this; }
+  Split_integer& operator*= (Split_integer y) { return *this=operator*(y); }
+  Split_integer& negate() { real_part=-e(); s_part=-s(); return *this; }
+  Split_integer& times_s() { std::swap(real_part,s_part); return *this; }
+  Split_integer& times_1_s() { real_part= -(s_part-=e()); return *this; }
+
+}; // |class Split_integer|
 
 std::ostream& operator<< (std::ostream& out, const Rational& frac);
 
@@ -104,7 +145,7 @@ template<typename I>
 template<typename I>
   inline I max(I a,I b) { return a<b ? b : a; }
 
-/*! The result of |divide(a,b)| is the unique ineteger $q$ with $a = q.b + r$,
+/*! The result of |divide(a,b)| is the unique integer $q$ with $a = q.b + r$,
   and $0 \leq r < b$. Here the sign of |a| may be arbitrary, the requirement
   for |r| assumes |b| positive, which is why it is passed as unsigned (also
   this better matches the specification of |remainder| below). Callers must
@@ -121,11 +162,11 @@ template<typename I>
   never did any harm. MvL]
 */
 template<typename I>
-  inline I divide(I a, unsigned long b)
+  inline I divide(I a, Denom_t b)
   { return a >= 0 ? a/b : ~(~a/b); } // left operand is safely made unsigned
 
-// override for |I=unsigned long| (is instantiated for |Matrix<unsigned long>|)
-inline unsigned long divide (unsigned long a, unsigned long b)
+// override for |I=Denom_t| (is instantiated for |Matrix<Denom_t>|)
+inline Denom_t divide (Denom_t a, Denom_t b)
   { return a/b; } // unsigned division is OK in this case
 
 /*!
@@ -136,42 +177,37 @@ inline unsigned long divide (unsigned long a, unsigned long b)
   the deficiency of 'signed modulo' by always returning the unique number |r|
   in [0,m[ such that $a = q.b + r$, in other words with |q=divide(a,b)| above.
 
-  NOTE: For $a<0$ one should \emph{not} return |m - (-a % m)|; this fails
-  iff $m$ divides $a$. However replacing |-| by |~|, which maps $a\mapsto-1-a$
-  and satifies |~(m*q+r)==m*~q+(m+~r)|, the result is always correct.
+  NOTE: For $a<0$ one should \emph{not} return |m - (-a % b)|; this fails when
+  $b$ divides $a$. However replacing |-| by |~|, which maps $a\mapsto-1-a$
+  and satifies |~(q*b+r)==~q*b+(b+~r)|, the result is always correct.
 */
 template<typename I>
-  inline unsigned long remainder(I a, unsigned long b)
+  inline Denom_t remainder(I a, Denom_t b)
   { return a >= 0 ? a%b : b+~(~a%b); } // conversions to unsigned are safe here
 
+  inline Denom_t div_gcd (Denom_t d, Denom_t a) { return d/unsigned_gcd(a,d); }
 
-
-  inline unsigned long div_gcd (unsigned long d, unsigned long a)
-  { return d/unsigned_gcd(a,d); }
-
-  inline unsigned long gcd (long a, unsigned long b)
+  inline Denom_t gcd (Numer_t a, Denom_t b)
   {
     if (a < 0)
-      return unsigned_gcd(static_cast<unsigned long>(-a),b);
+      return unsigned_gcd(static_cast<Denom_t>(-a),b);
     else
-      return unsigned_gcd(static_cast<unsigned long>(a),b);
+      return unsigned_gcd(static_cast<Denom_t>(a),b);
   }
 
-  inline unsigned long& modAdd(unsigned long& a, unsigned long b,
-			       unsigned long n)
+  // we assume |a| and |b| to be less than |n| here
+  inline Denom_t modAdd(Denom_t a, Denom_t b, Denom_t n)
   {
     if (a < n-b)
-      a += b;
+      return a + b;
     else
-      a -= n-b;
-    return a;
+      return a - (n-b);
   }
 
   inline Rational& Rational::normalize()
   {
-    unsigned long d = gcd(num,denom);
-    if (d>1)
-      num/=long(d),denom/=d;
+    Denom_t d = gcd(num,denom);
+    if (d>1)      num/=Numer_t(d),denom/=d;
     return *this;
   }
 

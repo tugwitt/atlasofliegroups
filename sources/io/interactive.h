@@ -3,7 +3,7 @@
 
   Copyright (C) 2004,2005 Fokko du Cloux
   Copyright (C) 2006--2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -95,7 +95,7 @@ namespace interactive {
     (const standardrepk::SRK_context& c)
     throw(error::InputError);
 
-  repr::StandardRepr get_repr(const repr::Rep_context& c)
+  StandardRepr get_repr(const Rep_context& c)
     throw(error::InputError);
 
   input::InputBuffer& common_input();
@@ -104,7 +104,8 @@ namespace interactive {
   SubSystem get_parameter(RealReductiveGroup& GR,
 			  KGBElt& x,
 			  Weight& lambda_rho,
-			  RatWeight& gamma);
+			  RatWeight& gamma)
+    throw(error::InputError);
 
   void getInteractive(atlas::Parabolic &psg, size_t rank)
     throw(error::InputError);

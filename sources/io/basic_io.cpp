@@ -2,7 +2,7 @@
   This is basic_io.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -22,6 +22,8 @@
 #include "lietype.h" // Lie types
 
 #include "prettyprint.h" // |printPol| (why isn't this needed?)
+
+#include "repr.h" // printing of parameters and parameter polynomials
 
 /*****************************************************************************
 
@@ -130,7 +132,8 @@ namespace matrix { // since |Weight| = |matrix::Vector<int>|
   Using |seqPrint| it is output as a bracket-enclosed, comma-separated list.
 */
 
-std::ostream& operator<< (std::ostream& strm, const Weight& v)
+template<typename C>
+std::ostream& operator<< (std::ostream& strm, const Vector<C>& v)
 {
   std::ostringstream o; // accumulate in string for interpretation of width
   basic_io::seqPrint(o, v.begin(), v.end(), ",", "[", "]");
@@ -150,6 +153,36 @@ namespace ratvec {
   }
 
 } // |namespace ratvec|
+
+namespace arithmetic {
+
+  std::ostream& operator<< (std::ostream& strm, const Split_integer& s)
+  { return strm << '(' << s.e() << '+' << s.s() << "s)"; }
+
+} // |namespace arithmetic|
+
+namespace repr {
+
+  std::ostream& Rep_context::print (std::ostream& str,const StandardRepr& z)
+    const
+  {
+    return
+      str << "{x=" << z.x()
+	  << ",lambda=" << lambda(z)
+	  << ",nu=" << nu(z) << '}';
+  }
+
+  std::ostream& Rep_context::print (std::ostream& str,const SR_poly& P) const
+  {
+    for (SR_poly::const_iterator it=P.begin(); it!=P.end(); ++it)
+      print(str << (it==P.begin() ?"":"+") << it->second, it->first)
+	<< std::endl;
+    return str;
+  }
+
+} // |namespace repr|
+
+
 
 // binary input
 
@@ -238,5 +271,12 @@ template std::ostream& polynomials::operator<<
 
 template std::ostream& bitvector::operator<<
   (std::ostream& strm, const BitVector<constants::RANK_MAX>& b);
+
+namespace matrix {
+template std::ostream& operator<< (std::ostream& strm, const Vector<int>& v);
+template std::ostream& operator<<
+  (std::ostream& strm, const Vector<arithmetic::Numer_t>& v);
+
+} // |namespace matrix|
 
 } // namespace atlas

@@ -6,7 +6,7 @@
   This is lietype.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -93,6 +93,7 @@ struct SimpleLieType : public std::pair<TypeLetter,size_t>
 struct LieType : public std::vector<SimpleLieType>
 { typedef std::vector<SimpleLieType> base;
   LieType() : base() {}
+  LieType(const base& b) : base(b) {}
 
   size_t rank() const;
   size_t semisimple_rank() const;

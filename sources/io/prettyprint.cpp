@@ -2,7 +2,7 @@
   This is prettyprint.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -229,7 +229,7 @@ std::ostream& printInvolution(std::ostream& strm,
     if (dec[i]>=0) strm << static_cast<char>('1'+dec[i]) << '^';
     else strm << static_cast<char>('1'+~dec[i]) << 'x';
 
-  return strm;
+  return strm<<'e';
 }
 
 template<typename C>

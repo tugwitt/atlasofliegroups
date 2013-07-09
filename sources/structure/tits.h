@@ -7,7 +7,7 @@ TitsGroup and TitsElt.
   This is tits.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -183,7 +183,7 @@ class GlobalTitsGroup : public TwistedWeylGroup
   GlobalTitsGroup(const ComplexReductiveGroup& G,tags::DualTag);
 
   //!\brief constructor from subdatum (dual side) + involution information
-  GlobalTitsGroup(const SubSystem& sub,
+  GlobalTitsGroup(const SubSystemWithGroup& sub,
   		  const WeightInvolution& theta, // on opposite side from |sub|
 		  WeylWord& ww); // output: expresses |-theta^t| for |sub|
 
@@ -308,7 +308,7 @@ class SubTitsGroup : public GlobalTitsGroup
  public:
   //!\brief constructor from subdatum (dual side) + involution information
   SubTitsGroup(const ComplexReductiveGroup& G,
-	       const SubSystem& sub,
+	       const SubSystemWithGroup& sub,
 	       const WeightInvolution& theta,
 	       WeylWord& ww); // output: expesses |-theta^t| for |sub|
   TorusElement base_point_offset(const TwistedInvolution& tw) const;
@@ -414,8 +414,8 @@ reduced decomposition.
   const WeylElt& w() const { return d_w; }
 
 /* the same componenent under another name (to make it smell sweeter); note
-   however that this returns a value, not a reference (to not make the
-   assumtion that |TwistedInvolution| is identical to |WeylElt|)
+   however that this returns a value, not a reference (to avoid making the
+   assumption here that |TwistedInvolution| is identical to |WeylElt|)
    */
 /*!\brief twisted involution represented by canonical Weyl part */
   TwistedInvolution tw() const { return TwistedInvolution(d_w); }
@@ -537,7 +537,7 @@ $H(2)$, for twisting TorusPart values when commuting with \f$\delta\f$.
 	    const weyl::Twist& twist);
 
   //!\brief Constructor for Tits group relative to a subsystem
-  TitsGroup(const SubSystem& sub,
+  TitsGroup(const SubSystemWithGroup& sub,
 	    const WeightInvolution& theta,
 	    WeylWord& ww);
 
@@ -740,7 +740,7 @@ class TitsCoset
 	    Grading parent_base_grading);
 
   // this constructor computes the inner class for |sub| defined by |theta|
-  TitsCoset(const SubSystem& sub,
+  TitsCoset(const SubSystemWithGroup& sub,
 	    const WeightInvolution& theta,
 	    Grading parent_base_grading, // by value: small
 	    WeylWord& ww);
@@ -763,6 +763,12 @@ class TitsCoset
   // whether simple root |s| noncompact at KGB element represented by |a|
   inline bool simple_grading(const TitsElt& a, size_t s) const;
 
+  // grading of a KGB element at a simple-imaginary root: whether noncompact
+  bool simple_imaginary_grading(TorusPart x, RootNbr alpha) const;
+  // general grading of a KGB element at an imaginary root: whether noncompact
+  bool grading(TitsElt a, RootNbr alpha) const; // |a| by-value
+
+
   // operation defining cross action of simple roots
   inline void basedTwistedConjugate(TitsElt& a, size_t s) const;
 
@@ -783,9 +789,6 @@ class TitsCoset
   // also keep a version for torus part only
   tits::TorusPart twisted(const tits::TorusPart& t) const
   { return Tg.twisted(t);}
-
-  // general grading of a KGB element at an imaginary root: whether noncompact
-  bool grading(TitsElt a, RootNbr n) const; // |a| by-value
 
   // various methods that provide a starting KGB element for any Cartan class
   TitsElt naive_seed (ComplexReductiveGroup& G,
@@ -835,12 +838,14 @@ class EnrichedTitsGroup : public TitsCoset
    $\sigma_s\sigma_w\delta=m_s^{grading_offset[s]}.\sigma_w\delta.\sigma_s$.
    Then $X_\alpha$ has eigenvalue $(-1)^grading_offset[s]$ for conjugation by
    $\sigma_w.\delta$, in other words $grading_offset[s]$ is also the grading
-   of $\sigma_w.\delta$ at $\alpha$. Left multiplication of $\sigma_w.\delta$
-   by a torus element $x$ will modify this grading to the opposite parity if
-   and only if $\alpha(t)=-1$; since this torus part $x$ is represented as a
-   bitvector, we can take the scalar product of the reduction mod 2 of
-   $\alpha$ with $x$ to compute this correction. The |!=|-operation, which on
-   |bool| values means exclusive or, combines the values.
+   of $\sigma_w.\delta$ at $\alpha$.
+
+   Left multiplication of $\sigma_w.\delta$ by a torus element $x$ will modify
+   this grading to the opposite parity if and only if $\alpha(x)=-1$; since
+   this torus part $x$ is represented as a bitvector, we can take the scalar
+   product of the reduction mod 2 of $\alpha$ with $x$ to compute this
+   correction. The |!=|-operation, which on |bool| values means exclusive or,
+   combines the values.
 
    Note that by using the a left torus factor |x| rather than a right factor,
    we need not refer to $\beta$, i.e., |(twisted(s))|, in the dot product.
@@ -856,19 +861,19 @@ bool TitsCoset::simple_grading(const TitsElt& a, size_t s) const
    involution $a.x_0.\delta$ by $\sigma_s$ or by $\sigma_s^{-1}=\sigma_s^3$.
    These differ by conjugation by the torus element $\sigma_s^2=m_s$, which is
    not a trivial operation at the Tits group level, but as mentioned stays
-   withing the equivalence relation of our interpretation of Tits elements.
+   within the equivalence relation of our interpretation of Tits elements.
    Therefore only one operation is implemented, and it defines an involution
    at the level of the KGB structure, generating for varying $s$ a $W$ action.
 
    For the twisted involution $w$ this operation is just twisted conjugation,
    giving $w'=s.w.t$ where $t=twisted(s)$. For the entire Tits group part
-   $a=x.\sigma_w$ twisted conjugation by $\sigma_s$ in the Tits group |Tg|
+   $a=x.\sigma_w$, twisted conjugation by $\sigma_s$ in the Tits group |Tg|
    gives an element $a'=x'.\sigma_{w'}$ such that $\sigma_s.a=a'.\sigma_t$.
-   Finally $\sigma_s.x.\sigma_w.\delta=x'.\sigma_{w'}.\sigma_t.\delta
-   =x'.\sigma_{w'}.\delta.\sigma_s.m_s^{grading_offset[s]}$. Because of the
-   equivalence in interpreting |TitsElement| values, we may replace
-   multiplication on the right by the torus element $m_t^{grading_offset[s]}$
-   by multiplication on the left leading to the formula implemented below.
+   Finally $\sigma_s.a.\delta=a'.\sigma_t.\delta=a'.\delta.\sigma_s.
+   m_s^{grading_offset[s]}$. Because of the equivalence in interpreting
+   |TitsElement| values, we may replace multiplication on the right by the
+   torus element $m_t^{grading_offset[s]}$ by multiplication on the left
+   leading to the formula implemented below.
 */
 inline
 void TitsCoset::basedTwistedConjugate(TitsElt& a, size_t s) const

@@ -8,7 +8,7 @@ StandardRepK and KhatContext.
 
   Copyright (C) 2004, 2005 Fokko du Cloux
   Copyright (C) 2008, 2009 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups version 0.2.4
+  part of the Atlas of Lie Groups and Representations version 0.2.4
 
   See file main.cpp for full copyright notice
 */
@@ -16,7 +16,6 @@ StandardRepK and KhatContext.
 #ifndef STANDARDREPK_H  /* guard against multiple inclusions */
 #define STANDARDREPK_H
 
-#include <map>
 #include <set>
 #include <vector>
 #include <iostream>
@@ -44,10 +43,10 @@ typedef q_Char::coef_t q_CharCoeff; // i.e., |Polynomial<int>|
 
 // remaining definitions could be in atlas_types.h, but seem module-specific
 
-typedef free_abelian::Free_Abelian<seq_no,long int,graded_compare> combination;
+typedef Free_Abelian<seq_no,long int,graded_compare> combination;
 typedef std::pair<seq_no,combination> equation;
 
-typedef free_abelian::Free_Abelian<seq_no,q_CharCoeff,graded_compare> q_combin;
+typedef Free_Abelian<seq_no,q_CharCoeff,graded_compare> q_combin;
 typedef std::pair<seq_no,q_combin> q_equation;
 
 
@@ -57,7 +56,7 @@ template <typename C>
   matrix::Matrix_base<C> triangularize
     (const std::vector<
        std::pair<seq_no,
-                 free_abelian::Free_Abelian<seq_no,C,graded_compare>
+                 Free_Abelian<seq_no,C,graded_compare>
                 > >& system,
      std::vector<seq_no>& new_order);
 
@@ -181,7 +180,7 @@ public:
 
 // manipulators: none (done by friend class KhatContext)
 
-// special members required by hashtable::HashTable
+// special members required by HashTable
 
   typedef std::vector<StandardRepK> Pooltype;
   bool operator!=(const StandardRepK& another) const
@@ -257,7 +256,7 @@ class SRK_context
 
 // we cache a number of |proj_info| values, indexed by sets of generators
   bitset_entry::Pooltype proj_pool;
-  hashtable::HashTable<bitset_entry,unsigned int> proj_sets;
+  HashTable<bitset_entry,unsigned int> proj_sets;
   std::vector<proj_info> proj_data;
 
  public:
@@ -381,7 +380,7 @@ class SRK_context
   // equivalent by $q$-Hecht-Schmid identity for simple-imaginary root $\alpha$
   q_Char q_HS_id_eq(const StandardRepK& s, RootNbr alpha) const;
 
-  // no need for |q_back_HS_id_eq|, it would not ivolve $q$; use |back_HS_id|
+  // no need for |q_back_HS_id_eq|, it would not involve $q$; use |back_HS_id|
 
   /*! Returns the sum of absolute values of the scalar products of
     $(1+theta)\lambda$ and the positive coroots. This gives a Weyl group
@@ -419,7 +418,7 @@ public:
   bool operator()(seq_no x, seq_no y) const
   {
     level hx=(*h)[x], hy=(*h)[y];
-    return hx!=hy ? hx<hy : x<y;
+    return hx!=hy ? hx<hy : x<y; // compare levels; sequence nbrs break ties
   }
 }; // |class graded_compare|
 
@@ -428,7 +427,7 @@ public:
 // necessary to interpret the d_lambda field in StandardRepK are stored here
 class KhatContext : public SRK_context
 {
-  typedef hashtable::HashTable<StandardRepK,seq_no> Hash;
+  typedef HashTable<StandardRepK,seq_no> Hash;
 
   StandardRepK::Pooltype nonfinal_pool,final_pool;
   Hash nonfinals,finals;
@@ -497,7 +496,7 @@ class KhatContext : public SRK_context
 // necessary to interpret the d_lambda field in StandardRepK are stored here
 class qKhatContext : public SRK_context
 {
-  typedef hashtable::HashTable<StandardRepK,seq_no> Hash;
+  typedef HashTable<StandardRepK,seq_no> Hash;
 
   StandardRepK::Pooltype nonfinal_pool,final_pool;
   Hash nonfinals,finals;

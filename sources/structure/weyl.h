@@ -6,7 +6,7 @@
   This is weyl.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -583,14 +583,18 @@ public:
   // reflection action of Weyl group on a root
   void act(const RootDatum& rd, const WeylElt& w, RootNbr& alpha) const;
   // standard reflection action of Weyl group using a root datum
-  void act(const RootDatum& rd, const WeylElt& w, Weight& v) const;
+  template<typename C>
+    void act(const RootDatum& rd, const WeylElt& w, matrix::Vector<C>& v)
+    const;
   // standard reflection action of Weyl group using a root datum
   void act(const RootDatum& rd, const WeylElt& w, RatWeight& v) const;
   // standard reflection action of Weyl group using a root datum
   void act(const RootDatum& rd, const WeylElt& w, LatticeMatrix& M) const;
 
   // same using only lists of simple (co)roots avoiding construction root datum
-  void act(const PreRootDatum& prd, const WeylElt& w, Weight& v) const;
+  template<typename C>
+    void act(const PreRootDatum& prd, const WeylElt& w, matrix::Vector<C>& v)
+    const;
   void act(const PreRootDatum& prd, const WeylElt& w, RatWeight& v) const;
   void act(const PreRootDatum& prd, const WeylElt& w, LatticeMatrix& M) const;
  /*!
@@ -680,9 +684,9 @@ public:
   Twist dual_twist() const; // the twist for the dual twisted Weyl group
 
   /*!
-     \brief Twisted conjugates element |tw| by the generator |s|:
-     \f$tw:=s.tw.\delta(s)\f$. Returns length change in $\{-2,0,2\}$
-     these functions ought to have |s|,|ww| as first argument, for consistency
+     Twisted conjugates element |tw| by the generator |s|:
+     $tw:=s.tw.\delta(s)$. Returns length change, in $\{-2,0,2\}$. For
+     consistency, these functions should have |s| resp. |ww| as first argument
    */
   int twistedConjugate(TwistedInvolution& tw, Generator s) const
   {

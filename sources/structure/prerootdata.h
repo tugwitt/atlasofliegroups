@@ -14,7 +14,7 @@
   This is prerootdata.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -102,7 +102,8 @@ in the dual of the basis specified by argument b of the constructor.
 
   int_Matrix Cartan_matrix() const;
 
-  void simpleReflect(Weight& v, weyl::Generator i) const;
+  template<typename C>
+    void simpleReflect(matrix::Vector<C>& v, weyl::Generator i) const;
   void simple_reflect(weyl::Generator i, LatticeMatrix& M) const;
   void simple_reflect(LatticeMatrix& M,weyl::Generator i) const;
 

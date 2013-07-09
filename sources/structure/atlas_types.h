@@ -7,7 +7,7 @@
   This is atlas_types.h
 
   Copyright (C) 2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -62,9 +62,15 @@ namespace atlas {
   namespace bitmap { class BitMap; }
   using bitmap::BitMap;
 
-  namespace arithmetic { class Rational; }
+  namespace arithmetic {
+    typedef long long int Numer_t;
+    typedef unsigned long long int Denom_t;
+    class Rational;
+    class Split_integer;
+  }
   using arithmetic::Rational;
   typedef std::vector<Rational> RationalList;
+  using arithmetic::Split_integer;
 
   namespace matrix {
     template<typename C> class Vector;
@@ -100,10 +106,14 @@ namespace atlas {
   namespace hashtable{
     template <class Entry, typename Number> class HashTable;
   }
+  using hashtable::HashTable;
+
   namespace free_abelian {
     template<typename T, typename C=long int, typename Compare=std::less<T> >
       struct Free_Abelian;
   }
+  using free_abelian::Free_Abelian;
+
   namespace polynomials {
     template<typename C> class Polynomial;
     template<typename C> class Safe_Poly;
@@ -140,8 +150,9 @@ namespace atlas {
   // when related to a root system, these alternatives can be used
   typedef int_Vector Weight;
   typedef int_Vector Coweight;
-  typedef ratvec::RationalVector<int> RatWeight;
-  typedef ratvec::RationalVector<int> RatCoweight;
+  typedef ratvec::RationalVector<arithmetic::Numer_t> RatWeight;
+  typedef ratvec::RationalVector<arithmetic::Numer_t> RatCoweight;
+  typedef matrix::Vector<arithmetic::Numer_t> Ratvec_Numer_t;
   typedef int_Matrix WeightInvolution;
   typedef int_Matrix CoweightInvolution;
 
@@ -195,7 +206,6 @@ namespace atlas {
     class RootDatum;
     typedef int_Vector Root;
     typedef WeightList::const_iterator WRootIterator;
-    class SubSystem;
   }
   using rootdata::RootSystem;
   using rootdata::RootDatum;
@@ -276,8 +286,9 @@ namespace atlas {
 
   namespace topology { class Connectivity; }
 
-  namespace subsystem {class SubSystem; }
+  namespace subsystem {class SubSystem; class SubSystemWithGroup; }
   using subsystem::SubSystem;
+  using subsystem::SubSystemWithGroup;
 
 
   typedef unsigned short CartanNbr; // index of Cartan class
@@ -368,7 +379,6 @@ namespace atlas {
     typedef polynomials::Safe_Poly<KLCoeff> KLPol;
     typedef unsigned int KLIndex; // $<2^{32}$ distinct polynomials for $E_8$!
     typedef KLCoeff MuCoeff;
-    typedef std::pair<std::vector<BlockElt>,std::vector<MuCoeff> > MuRow;
     typedef std::vector<KLPol> KLStore;
     typedef KLStore::const_reference KLPolRef;
     typedef std::vector<KLIndex> KLRow;
@@ -378,13 +388,13 @@ namespace atlas {
   namespace standardrepk {
     class StandardRepK;	// standard representation restricted to K
     typedef std::pair <Weight,RankFlags> HCParam; // free part wrt rho, torsion
-    typedef free_abelian::Free_Abelian<StandardRepK> Char;// linear combination
+    typedef Free_Abelian<StandardRepK> Char;// linear combination
     typedef std::pair<StandardRepK,Char> CharForm;
     typedef std::pair<Weight,TitsElt> RawRep;
-    typedef free_abelian::Free_Abelian<RawRep> RawChar;
-    typedef free_abelian::Free_Abelian<StandardRepK,Polynomial<int> > q_Char;
+    typedef Free_Abelian<RawRep> RawChar;
+    typedef Free_Abelian<StandardRepK,Polynomial<int> > q_Char;
     typedef std::pair<StandardRepK,q_Char> q_CharForm;// $q$-$K$-type formula
-    typedef free_abelian::Free_Abelian<RawRep,Polynomial<int> >Raw_q_Char;
+    typedef Free_Abelian<RawRep,Polynomial<int> >Raw_q_Char;
     typedef unsigned int seq_no; // sequence number of stored standard rep|K
     typedef unsigned int level; // unsigned LatticeCoeff
     struct Cartan_info;
@@ -395,10 +405,17 @@ namespace atlas {
     class HechtSchmid;	// Hecht-Schmid identity
     class PSalgebra;    // parabolic subalgebra
   }
+  using standardrepk::StandardRepK;
+  using standardrepk::SRK_context;
+
   namespace repr {
     class StandardRepr;	// triple $(x,\lambda,\gamma)$
-    class Rep_context;	// support class for interpreting |StandardRepr;|
+    class Rep_context;	// support class for interpreting |StandardRepr|
+    class Rep_table;	// storage class for |StandardRepr| compuations
   }
+  using repr::StandardRepr;
+  using repr::Rep_context;
+  using repr::Rep_table;
 
   namespace realform_io { class Interface; } // maps internals to names
   namespace complexredgp_io { class Interface; } // a pair of the above

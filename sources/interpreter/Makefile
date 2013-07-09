@@ -1,3 +1,10 @@
+# This Makefile serves only to make realex + source documentation by running
+# 'make' inside this directory; if you are just interested in compiling
+# realex, use run 'make realex' in the main atlas directory instead. In
+# particular if you want optimization, use that (where optimization is on by
+# default) rahter than this Makefile. As this file is used for development
+# work only, it unconditionally sets debugging on and optimization off.
+
 # where to look for the atlas sources (in the parent directory)
 atlas_sources := ..
 
@@ -11,8 +18,8 @@ INCLUDE_FLAGS := $(ATLAS_DIRS:%=-I$(atlas_sources)/%/)
 # version of CWEBx, see http://www-math.univ-poitiers.fr/~maavl/CWEBx
 # the ++ flags make them expect C++ rather than C
 
-CTANGLE := ctanglex ++
-CWEAVE := cweavex ++ $(INCLUDE_FLAGS)
+CTANGLE := ../../cweb-x3.51/ctanglex ++
+CWEAVE := ../../cweb-x3.51/cweavex ++ $(INCLUDE_FLAGS)
 
 # these are the optional flags for CWEBx, modify them according to your taste
 CWEAVEFLAGS  := -p +mde
@@ -20,11 +27,14 @@ CTANGLEFLAGS := -p
 
 CWEBXMACROS := $(shell kpsewhich cwebxmac.tex)
 
-# these are used for C++ compilation and linking
+# these are used for C++ compilation and linking (debugging, no optimization)
 CXXFLAGS = -Wall -Wno-parentheses -g $(INCLUDE_FLAGS)
 
 # our beloved C++ compiler
 CXX = g++
+
+# parallel execution beats the old_targets trickery below, turn it off
+MAKEFLAGS += -j1
 
 # only the atlas object files listed below are used
 atlas_objects := $(atlas_sources)/structure/prerootdata.o \
@@ -98,26 +108,34 @@ dvifiles := $(cwebx_sources:%.w=%.dvi)
 
 objects := $(c++objects) parser.tab.o $(atlas_objects)
 
-# You may define an environment variable 'rlincludes' to override the
-# definition below. For me (on Debian or Ubuntu Linux) just "-lreadline"
-# suffices, but on some systems adding "-lcurses" seems to be necessary.
-# The author (Marc van Leeuwen) offers EUR 40.96 to the first person who can
-# provide a decent reason why the "-lcurses" should be needed here
+# You may define an environment variable 'rl_libs' to override the definition
+# below. For me (on Debian or Ubuntu Linux) just "-lreadline" suffices, but on
+# some systems adding "-lcurses" seems to be necessary. The author (Marc van
+# Leeuwen) offers EUR 40.96 to the first person who can provide a decent
+# reason why the "-lcurses" should be needed here
 
-rlincludes ?= -lreadline -lcurses
+ifeq ($(readline),false)
+    CXXFLAGS += -DNREADLINE
+    rl_libs =
+else
+    rl_libs ?= -lreadline
+
+# to override this, either define and export a shell variable 'rl_libs'
+# or set LDFLAGS when calling make. For instance for readline on the Mac do:
+# $ make LDFLAGS="-lreadline.5 -lcurses"
+endif
+
+LDFLAGS := $(rl_libs)
+
 
 # RULES follow now
 
-.PHONY: all mostlyclean clean headers dvifiles compilable
+.PHONY: all mostlyclean clean headers cppfiles dvifiles compilable
 
-all:	headers dvifiles realex
+all:	headers dvifiles ../../realex
 
-# 'make clean' removes all derived files
-clean:  mostlyclean
-	rm -f realex
-
-# 'make mostlyclean' removes all derived files except the executable program
-mostlyclean:
+# 'make clean' all derived files, but the executable program isn't here
+clean:
 	rm -f *.o *.log *.toc $(webtexfiles) *.dvi *~ *.cpp *.c *.h
 
 # 'make compilable' prepares everything for compilation
@@ -150,8 +168,6 @@ $(c++objects) $(atlas_objects): %.o: %.cpp
            fi done
 	@rm -r old_targets
 
-types.h types.cpp: evaluator.w
-
 # prevent remaking files that are under CVS, unless .w file changed recently
 ../utilities/filekl.h ../utilities/filekl.cpp ../utilities/filekl_in.h ../utilities/filekl_in.cpp : ../utilities/filekl.w ;
 
@@ -165,27 +181,32 @@ types.h types.cpp: evaluator.w
 
 # these targets allow you to say "make headers" or "make dvifiles"
 headers: $(headers)
+cppfiles: $(c++files)
 dvifiles: $(dvifiles)
 
-# Our executable program is now called 'realex'. As we recently found out,
-# this stands for Rewritten Expression-based  Atlas of Lie groups EXecutable
-realex: $(objects)
-	$(CXX) $(rlincludes) -o realex $^
+# Our executable program 'realex' is in atlas root directory. Then name realex
+# stands for Rewritten Expression-based Atlas of Lie groups EXecutable
+../../realex: $(objects)
+	$(CXX) -o $@ $^ $(LDFLAGS)
 ifeq (,$(findstring t,$(MAKEFLAGS))) # unless a flag -t was given
 	$(MAKE) -t $@ # now that build succeeds mark everything as up-to-date
 endif
 
-# the parser is produced by bison, and compiled using the C compiler
+# the parser is produced by bison, and compiled using the C++ compiler
 parser.tab.c parser.tab.h: parser.y
 	bison -d parser.y
 parser.tab.o: parser.tab.c parsetree.h
-	$(CC) -c -g -Wall $(CFLAGS) $(CPPFLAGS) $< -o $@
+	$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) $< -o $@
 
-# miscellaneous dependencies, produced by hand for now
+# miscellaneous dependencies (some already known), produced by hand for now
+# these are also included from the main atlas makefile
+
+include dependencies
+
 # in general a .tex file depends on the same files as the corresponding .o
 # file, since cweave scans the same header files as the C++ compiler
 
 lexer.o lexer.tex: parser.tab.h buffer.h
-evaluator.o evaluator.tex: evaluator.h lexer.h parsetree.h
-built-in-types.o built-in-types.tex: evaluator.h
+evaluator.o evaluator.tex: evaluator.h types.h lexer.h parsetree.h
+built-in-types.o built-in-types.tex: evaluator.h types.h lexer.h
 main.o main.tex: $(headers)

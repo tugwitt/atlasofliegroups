@@ -1,5 +1,5 @@
- % Copyright (C) 2006 Marc van Leeuwen
-% This file is part of the Atlas of Reductive Lie Groups software (the Atlas)
+% Copyright (C) 2006-2012 Marc van Leeuwen
+% This file is part of the Atlas of Lie Groups and Representations (the Atlas)
 
 % This program is made available under the terms stated in the GNU
 % General Public License (GPL), see http://www.gnu.org/licences/licence.html
@@ -76,12 +76,17 @@ void initialise_builtin_types()
   @< Install coercions @>
 }
 
-@ Before we can define any types we must make sure the types
-defined in \.{evaluator.w} are known. Including this as first file from our
-header file ensures the types are known wherever they are needed.
+@ Before we can define any types we must make sure the types defined
+in \.{types.w} from which we shall derive others are known. Including this as
+first file from our header file ensures the types are known wherever they are
+needed. Some more basic built-in types likes integers, vectors, and strings
+are defined in \.{global.w}, and we need their declarations too in our
+implementation, but we avoid including its header into out header file.
+
+@h "global.h"
 
 @< Includes needed in the header file @>=
-#include "evaluator.h"
+#include "types.h"
 
 @*1 Lie types.
 Our first chapter concerns Lie types, as indicated by strings like
@@ -207,7 +212,7 @@ void Lie_type_wrapper(expression_base::level l)
 }
 @)
 void Lie_type_coercion()
-@+{@; return Lie_type_wrapper(expression_base::single_value); }
+@+{@; Lie_type_wrapper(expression_base::single_value); }
 
 @ We shall call this function \.{Lie\_type}.
 
@@ -218,9 +223,7 @@ install_function(Lie_type_wrapper,"Lie_type","(string->LieType)");
 very easy to implement.
 
 @< Install coercions @>=
-{ static type_expr Lie_type_type(complex_lie_type_type);
-  coercion(str_type,Lie_type_type,"LT",Lie_type_coercion);
-}
+
 
 
 @*2 Auxiliary functions for Lie types.
@@ -295,7 +298,9 @@ void Lie_type_string_wrapper(expression_base::level l)
 Lie type, so that for instance the correct number of inner class letters can
 be prepared (for this purpose type $T_n$ counts as $n$ factors). Since we
 expanded any $T_n$ into factors $T_1$, we can simply call the |size| method of
-the stored |LieType| value.
+the stored |LieType| value. To allow per-factor treatment of Lie type, we also
+define a function that converts a Lie type into a row of Lie types, one for
+every simple factor or torus factor.
 
 @< Local function definitions @>=
 void nr_factors_wrapper(expression_base::level l)
@@ -303,7 +308,18 @@ void nr_factors_wrapper(expression_base::level l)
   if (l!=expression_base::no_value)
     push_value(new int_value(t->val.size()));
 }
-
+@)
+void Lie_factors_wrapper(expression_base::level l)
+{ shared_Lie_type t=get<Lie_type_value>();
+  if (l==expression_base::no_value)
+    return;
+  row_ptr result(new row_value(t->val.size()));
+  for (unsigned i=0; i<t->val.size(); ++i)
+  { std::vector<SimpleLieType> factor(1,t->val[i]);
+    result->val[i]=shared_Lie_type(new Lie_type_value(LieType(factor)));
+  }
+  push_value(result);
+}
 
 @ Again we install our wrapper functions.
 @< Install wrapper functions @>=
@@ -313,7 +329,8 @@ install_function(type_of_Cartan_matrix_wrapper
 install_function(Lie_rank_wrapper,"rank","(LieType->int)");
 install_function(semisimple_rank_wrapper,"semisimple_rank","(LieType->int)");
 install_function(Lie_type_string_wrapper,"str","(LieType->string)");
-install_function(nr_factors_wrapper,"nr_factors","(LieType->int)");
+install_function(nr_factors_wrapper,"#","(LieType->int)");
+install_function(Lie_factors_wrapper,"%","(LieType->[LieType])");
 
 @*2 Finding lattices for a given Lie type.
 %
@@ -573,8 +590,7 @@ simply connected group of that type.
 
 @< Local function def... @>=
 void basic_involution_wrapper(expression_base::level l)
-{ push_tuple_components();
-@/shared_string str=get<string_value>();
+{ shared_string str=get<string_value>();
   shared_Lie_type t=get<Lie_type_value>();
 @/push_value(new matrix_value @| (lietype::involution
            (t->val,transform_inner_class_type(str->val.c_str(),t->val))));
@@ -648,7 +664,7 @@ Now we are ready to introduce a new primitive type for root data.
 struct root_datum_value : public value_base
 { RootDatum val;
 @)
-  root_datum_value(const RootDatum v) : val(v) @+ {}
+  root_datum_value(const RootDatum& v) : val(v) @+ {}
   virtual void print(std::ostream& out) const;
   root_datum_value* clone() const @+{@; return new root_datum_value(*this); }
   static const char* name() @+{@; return "root datum"; }
@@ -742,17 +758,19 @@ from these data to be a valid one.
 
 @< Local function definitions @>=
 void raw_root_datum_wrapper(expression_base::level l)
-{ size_t rank = get<int_value>()->val;
+{ shared_int rank = get<int_value>();
   shared_row simple_coroots=get<row_value>();
   shared_row simple_roots=get<row_value>();
 
+  if (rank->val<0)
+    throw std::runtime_error("Negative rank "+str(rank->val));
   if (simple_roots->val.size()!=simple_coroots->val.size())
     throw std::runtime_error
     ("Numbers "+str(simple_roots->val.size())+","
       +str(simple_coroots->val.size())+  " of simple (co)roots mismatch");
 @.Numbers of simple roots...@>
 
-  WeightList s; CoweightList c;
+  size_t r = rank->val; WeightList s; CoweightList c;
   s.reserve(simple_roots->val.size());
   c.reserve(simple_roots->val.size());
 
@@ -762,14 +780,13 @@ void raw_root_datum_wrapper(expression_base::level l)
     const Coweight& scr
       =force<vector_value>(simple_coroots->val[i].get())->val;
 
-    if (sr.size()!=rank or scr.size()!=rank)
-    throw std::runtime_error
-      ("Simple (co)roots not all of size "+str(rank));
+    if (sr.size()!=r or scr.size()!=r)
+      throw std::runtime_error("Simple (co)roots not all of size "+str(r));
     s.push_back(sr);
     c.push_back(scr);
   }
 
-  PreRootDatum prd(s,c,rank);
+  PreRootDatum prd(s,c,r);
   try @/{@; Permutation dummy;
     dynkin::Lie_type(prd.Cartan_matrix(),true,true,dummy);
   }
@@ -843,7 +860,8 @@ the new denominator~|d|.
 @.Length mismatch...@>
         +str(gen.size()) + ':' + str(v->val.size()));
 
-    M.set_column(j,gen.numerator());
+    Weight col(gen.numerator().begin(),gen.numerator().end()); // convert
+    M.set_column(j,col);
     for (size_t i=0; i<v->val.size(); ++i)
       if (v->val[i]*M(i,j)%long(denom[j])!=0) // must use signed arithmetic!!
 	throw std::runtime_error("Improper generator entry: "
@@ -914,56 +932,6 @@ void adjoint_datum_wrapper(expression_base::level l)
 @/root_datum_wrapper(expression_base::single_value);
 }
 
-@ Finally here are two more wrappers to make the root data for the special and
-general linear groups, in a form that is the most natural. We supply a matrix
-whose columns represent $\eps_1,\ldots,\eps_{n-1}$ for ${\bf SL}_n$ and
-$\eps_1,\ldots,\eps_n$ for ${\bf GL}_n$, when the basis of the simply
-connected group of type $A_{n-1}$ is given by $\omega_1,\ldots,\omega_{n-1}$
-and that of $A_{n-1}T_1$ is given by $\omega_1,\ldots,\omega_{n-1},t$, where
-$\omega_k=\sum_{i=1}^k\eps_i-kt$ and $\sum_{i=1}^n\eps_i=nt$. This matrix is
-most easily described by an example, for instance for ${\bf GL}_4$ it is
-$$
-   \pmatrix{1&-1&0&0\cr0&1&-1&0\cr0&0&1&-1\cr1&1&1&1\cr}.
-$$
-and for ${\bf SL}_n$ it is the $(n-1)\times(n-1)$ top left submatrix of that
-for ${\bf GL}_n$.
-
-@< Local function definitions @>=
-void SL_wrapper(expression_base::level l)
-{ shared_int n(get<int_value>());
-  if (n->val<1) throw std::runtime_error("Non positive argument for SL");
-@.Non-positive element...@>
-  if (l==expression_base::no_value)
-    return;
-  const size_t r=n->val-1;
-  Lie_type_ptr type(new Lie_type_value());
-  if (r>0) type->add_simple_factor('A',r);
-  push_value(type);
-  matrix_ptr lattice
-     (new matrix_value(int_Matrix(r))); // identity matrix
-  for (size_t i=0; i+1<r; ++i) // not |i<r-1|, since |r| unsigned and maybe 0
-    lattice->val(i,i+1)=-1;
-  push_value(lattice);
-@/root_datum_wrapper(expression_base::single_value);
-}
-@)
-void GL_wrapper(expression_base::level l)
-{ shared_int n(get<int_value>());
-  if (n->val<1) throw std::runtime_error("Non positive argument for GL");
-  if (l==expression_base::no_value)
-    return;
-  const size_t r=n->val-1;
-  Lie_type_ptr type(new Lie_type_value());
-  if (r>0) type->add_simple_factor('A',r);
-  type->add_simple_factor('T',1);
-  push_value(type);
-  matrix_ptr lattice
-     (new matrix_value(int_Matrix(r+1))); // identity matrix
-  for (size_t i=0; i<r; ++i)
-  @/{@; lattice->val(n->val-1,i)=1; lattice->val(i,i+1)=-1; }
-  push_value(lattice);
-@/root_datum_wrapper(expression_base::single_value);
-}
 
 @*2 Functions operating on root data.
 %
@@ -1089,7 +1057,8 @@ void fundamental_weight_wrapper(expression_base::level l)
   if (unsigned(i)>=rd->val.semisimpleRank())
     throw std::runtime_error("Invalid index "+str(i));
   if (l!=expression_base::no_value)
-    push_value(new rational_vector_value(rd->val.fundamental_weight(i)));
+    push_value(new rational_vector_value
+      (rd->val.fundamental_weight(i).normalize()));
 }
 @)
 void fundamental_coweight_wrapper(expression_base::level l)
@@ -1098,7 +1067,8 @@ void fundamental_coweight_wrapper(expression_base::level l)
   if (unsigned(i)>=rd->val.semisimpleRank())
     throw std::runtime_error("Invalid index "+str(i));
   if (l!=expression_base::no_value)
-    push_value(new rational_vector_value(rd->val.fundamental_coweight(i)));
+    push_value(new rational_vector_value
+      (rd->val.fundamental_coweight(i).normalize()));
 }
 
 
@@ -1184,8 +1154,6 @@ install_function(quotient_datum_wrapper
 install_function(simply_connected_datum_wrapper
 		,@|"simply_connected","(LieType->RootDatum)");
 install_function(adjoint_datum_wrapper,@| "adjoint","(LieType->RootDatum)");
-install_function(SL_wrapper,@|"SL","(int->RootDatum)");
-install_function(GL_wrapper,@|"GL","(int->RootDatum)");
 install_function(simple_roots_wrapper,@|"simple_roots","(RootDatum->mat)");
 install_function(simple_coroots_wrapper,@|"simple_coroots","(RootDatum->mat)");
 install_function(positive_roots_wrapper,@|
@@ -1871,6 +1839,9 @@ void root_datum_of_inner_class_wrapper(expression_base::level l)
     push_value(new root_datum_value(G->val.rootDatum()));
 }
 
+void inner_class_to_root_datum_coercion()
+{@; root_datum_of_inner_class_wrapper(expression_base::single_value); }
+
 void dual_inner_class_wrapper(expression_base::level l)
 { shared_inner_class G(get<inner_class_value>());
   if (l!=expression_base::no_value)
@@ -1991,8 +1962,9 @@ void dual_occurrence_matrix_wrapper(expression_base::level l)
   push_value(M);
 }
 
-@ Finally we install everything.
+@ Finally we install everything related to inner classes.
 @< Install wrapper functions @>=
+
 install_function(classify_wrapper,@|"classify_involution"
                 ,"(mat->int,int,int)");
 install_function(fix_involution_wrapper,@|"inner_class"
@@ -2039,19 +2011,18 @@ connected complex reductive group; the corresponding Atlas class is called
 
 @*2 Class definition.
 The layout of this type of value is different from what we have seen before.
-An Atlas object of class |RealReductiveGroup| is dependent upon
-another Atlas object to which it stores a pointer, which is of type
-|ComplexReductiveGroup|, so we must make sure that the object
-pointed to cannot disappear before it does. The easiest way to do this is to
-place a |inner_class_value| object |parent| inside the |real_form_value| class
-that we shall now define; the reference-counting scheme introduced above then
-guarantees that the data we depend upon will remain in existence sufficiently
-long. Since that data can be accessed from inside the
-|RealReductiveGroup|, we shall mostly mention the |parent| to
-access its |interface| and |dual_interface| fields. To remind us that the
-|parent| is not there to be changed by us, we declare it |const|. The object
-referred to may in fact undergo internal change however, via manipulators of
-the |val| field.
+An Atlas object of class |RealReductiveGroup| is dependent upon another Atlas
+object to which it stores a pointer, which is of type |ComplexReductiveGroup|,
+so we must make sure that the object pointed to cannot disappear before it
+does. The easiest way to do this is to place an |inner_class_value| object
+|parent| inside the |real_form_value| class that we shall now define; the
+reference-counting scheme introduced above then guarantees that the data we
+depend upon will remain in existence sufficiently long. Since that data can be
+accessed from inside the |RealReductiveGroup|, we shall mostly mention the
+|parent| with the purpose of accessing its |interface| and |dual_interface|
+fields. To remind us that the |parent| is not there to be changed by us, we
+declare it |const|. The object referred to may in fact undergo internal change
+however, via manipulators of the |val| field.
 
 We shall later derive from this structure, without adding data members, a
 structure to record dual real forms, which are constructed in the context of
@@ -2065,8 +2036,8 @@ struct real_form_value : public value_base
 { const inner_class_value parent;
   RealReductiveGroup val;
 @)
-  real_form_value(inner_class_value p,RealFormNbr f)
-  : parent(p), val(p.val,f) @+{}
+  real_form_value(const inner_class_value& p,RealFormNbr f) @/
+  : parent(p), val(p.val,f),rt_p(NULL) @+{}
 @)
   virtual void print(std::ostream& out) const;
   real_form_value* clone() const @+
@@ -2074,32 +2045,51 @@ struct real_form_value : public value_base
   static const char* name() @+{@; return "real form"; }
   const KGB& kgb () @+{@; return val.kgb(); }
    // generate and return $K\backslash G/B$ set
+  const Rep_context& rc();
+  Rep_table& rt();
+  ~real_form_value() @+{@; delete rt_p; }
 protected:
-  real_form_value(inner_class_value,RealFormNbr,tags::DualTag);
-     // for dual forms
+  real_form_value(const inner_class_value&,RealFormNbr,tags::DualTag);
   real_form_value(const real_form_value& v)
-  : parent(v.parent), val(v.val) @+{} // copy c'tor
+  : parent(v.parent), val(v.val), rt_p(v.rt_p) @+{}
+private:
+  Rep_table* rt_p;
+    // owned pointer, initially |NULL|, assigned at most once
 };
 @)
 typedef std::auto_ptr<real_form_value> real_form_ptr;
 typedef std::tr1::shared_ptr<real_form_value> shared_real_form;
 
-@ When printing a real form, we give the name by which it was chosen (where
-for once we do use the |parent| field), and provide some information about its
-connectedness. Since the names of the real forms are indexed by their outer
-number, but the real form itself stores its inner number, we must somewhat
-laboriously make the conversion here.
+@ The methods |rc| and |rt| ensure a |Rep_table| value is constructed at
+|*rt_p|, and returns a reference. The value so obtained will serve to
+manipulate parameters for standard modules, for which we shall define a
+built-in type below. Storing the value here ensures that it will be shared
+between different parameters, and that it will live as long as those parameter
+values do. The value itself does not take much space, but constructing it
+implicitly calls the |val.kgb| method, so we avoid doing this until there is a
+concrete need.
+
+@< Function def...@>=
+  const Rep_context& real_form_value::rc()
+    {@; return *(rt_p==NULL ? rt_p=new Rep_table(val) : rt_p); }
+  Rep_table& real_form_value::rt()
+    {@; return *(rt_p==NULL ? rt_p=new Rep_table(val) : rt_p); }
+
+@ When printing a real form, we give the name by which it is known in the
+parent inner class, and provide some information about its connectedness.
+Since the names of the real forms are indexed by their outer number, but the
+real form itself stores its inner number, we must somewhat laboriously make
+the conversion here.
 
 @< Function def...@>=
 void real_form_value::print(std::ostream& out) const
 { if (val.isCompact()) out << "compact ";
+  out << (val.isConnected() ? "connected " : "disconnected " );
   if (val.isQuasisplit())
     out << (val.isSplit() ? "" : "quasi") << "split ";
-  out << "real form '" @|
-  << parent.interface.typeName(parent.interface.out(val.realForm())) @|
-  << "', defining a"
-  << (val.isConnected() ? " connected" : " disconnected" ) @|
-  << " real group" ;
+  out << "real group with Lie algebra '" @|
+      << parent.interface.typeName(parent.interface.out(val.realForm())) @|
+      << '\'' ;
 }
 
 @ To make a real form is easy, one provides an |inner_class_value| and a valid
@@ -2128,10 +2118,18 @@ void quasisplit_form_wrapper(expression_base::level l)
 %
 From a real reductive group we can go back to its inner class
 @< Local function def...@>=
-void class_of_real_group_wrapper(expression_base::level l)
+void inner_class_of_real_form_wrapper(expression_base::level l)
 { shared_real_form rf(get<real_form_value>());
   if (l!=expression_base::no_value)
     push_value(new inner_class_value(rf->parent));
+}
+
+void real_form_to_inner_class_coercion()
+{@; inner_class_of_real_form_wrapper(expression_base::single_value); }
+
+void real_form_to_root_datum_coercion()
+{ shared_real_form rf(get<real_form_value>());
+  push_value(new root_datum_value(rf->parent.val.rootDatum()));
 }
 
 @ Here is a function that gives information about the dual component group
@@ -2190,7 +2188,7 @@ void Cartan_order_matrix_wrapper(expression_base::level l)
 Although they could be considered as real forms for the dual group and dual
 inner class, it will be convenient to be able to construct dual real forms in
 the context of the |inner_class_value| itself. The resulting objects will have
-a different type than ordinary real forms, but the will use the same structure
+a different type than ordinary real forms, but they will use the same structure
 layout. The interpretation of the fields is as follows for dual real forms:
 the |parent| field contains a copy of the original |inner_class_value|, but
 the |val| field contains a |RealReductiveGroup| object
@@ -2199,10 +2197,10 @@ correct.
 
 @< Function def...@>=
 
-real_form_value::real_form_value(inner_class_value p,RealFormNbr f
+real_form_value::real_form_value(const inner_class_value& p,RealFormNbr f
 				,tags::DualTag)
-: parent(p), val(p.dual,f)
-{}
+: parent(p), val(p.dual,f), rt_p(NULL)
+@+{}
 
 @ In order to be able to use the same layout for dual real forms but to
 nevertheless make a distinction (for instance in printing), we must derive a
@@ -2210,7 +2208,7 @@ new type from |real_form_value|.
 
 @< Type definitions @>=
 struct dual_real_form_value : public real_form_value
-{ dual_real_form_value(inner_class_value p,RealFormNbr f)
+{ dual_real_form_value(const inner_class_value& p,RealFormNbr f)
   : real_form_value(p,f,tags::DualTag()) @+{}
 @)
   virtual void print(std::ostream& out) const;
@@ -2271,6 +2269,25 @@ void real_form_from_dual_wrapper(expression_base::level l)
                  ,d->val.realForm()));
 }
 
+@ Finally we install everything related to real forms.
+@< Install wrapper functions @>=
+install_function(real_form_wrapper,@|"real_form","(InnerClass,int->RealForm)");
+install_function(quasisplit_form_wrapper,@|"quasisplit_form"
+		,"(InnerClass->RealForm)");
+install_function(inner_class_of_real_form_wrapper
+                ,@|"inner_class","(RealForm->InnerClass)");
+install_function(components_rank_wrapper,@|"components_rank","(RealForm->int)");
+install_function(count_Cartans_wrapper,@|"count_Cartans","(RealForm->int)");
+install_function(KGB_size_wrapper,@|"KGB_size","(RealForm->int)");
+install_function(Cartan_order_matrix_wrapper,@|"Cartan_order"
+					    ,"(RealForm->mat)");
+install_function(dual_real_form_wrapper,@|"dual_real_form"
+				       ,"(InnerClass,int->DualRealForm)");
+install_function(dual_quasisplit_form_wrapper,@|"dual_quasisplit_form"
+		,"(InnerClass->DualRealForm)");
+install_function(real_form_from_dual_wrapper,@|"real_form"
+				  ,"(DualRealForm->RealForm)");
+
 @*1 A type for Cartan classes.
 %
 Another type of value associated to inner classes are Cartan classes, which
@@ -2306,7 +2323,7 @@ struct Cartan_class_value : public value_base
   static const char* name() @+{@; return "Cartan class"; }
 private:
   Cartan_class_value(const Cartan_class_value& v)
-  : parent(v.parent), number(v.number), val(v.val) @+{}
+  : parent(v.parent), number(v.number), val(v.val) @+{} // copy constructor
 };
 @)
 typedef std::auto_ptr<Cartan_class_value> Cartan_class_ptr;
@@ -2314,7 +2331,9 @@ typedef std::tr1::shared_ptr<Cartan_class_value> shared_Cartan_class;
 
 @ In the constructor we used to check that the Cartan class with the given
 number currently exists, but now the |ComplexReductiveGroup::cartan| method
-assures that a one is generated if this should not have been done before.
+assures that one is generated if this should not have been done before. We
+therefore call that method in the initialiser; on return it provides a valid
+reference.
 
 @< Function def...@>=
 Cartan_class_value::Cartan_class_value(const inner_class_value& p,size_t cn)
@@ -2351,9 +2370,9 @@ void ic_Cartan_class_wrapper(expression_base::level l)
 }
 
 @ Alternatively (and this used to be the only way) one can provide a
-|real_form_value| together with a valid index into its list of Cartan classes.
-We translate this number into an index into the list for its containing inner
-class, and then get the Cartan class from there.
+|real_form_value| together with a valid index into \emph{its} list of Cartan
+classes. We translate this number into an index into the list for its
+containing inner class, and then get the Cartan class from there.
 
 @< Local function def...@>=
 void rf_Cartan_class_wrapper(expression_base::level l)
@@ -2520,7 +2539,7 @@ void fiber_part_wrapper(expression_base::level l)
      // translate part number of |pi| to real form
   row_ptr result (new row_value(0)); // cannot predict exact size here
   for (size_t i=0; i<pi.size(); ++i)
-    if (rf_nr[pi(i)] == rf->val.realForm())
+    if (rf_nr[pi.class_of(i)] == rf->val.realForm())
       result->val.push_back(shared_value(new int_value(i)));
   push_value(result);
 }
@@ -2610,7 +2629,7 @@ different lines after commas if necessary.
 @< Print the gradings for the part of |pi|... @>=
 { bool first=true; std::ostringstream os;
   for (size_t i=0; i<pi.size(); ++i)
-    if ( rf_nr[pi(i)] == rf->val.realForm())
+    if ( rf_nr[pi.class_of(i)] == rf->val.realForm())
     { os << ( first ? first=false,'[' : ',');
       Grading gr=cc->val.fiber().grading(i);
       gr=sigma.pull_back(gr);
@@ -2620,28 +2639,48 @@ different lines after commas if necessary.
   ioutils::foldLine(*output_stream,os.str(),"",",");
 }
 
+@ Finally we install everything related to Cartan classes.
+@< Install wrapper functions @>=
+install_function(ic_Cartan_class_wrapper,@|"Cartan_class"
+		,"(InnerClass,int->CartanClass)");
+install_function(rf_Cartan_class_wrapper,@|"Cartan_class"
+		,"(RealForm,int->CartanClass)");
+install_function(most_split_Cartan_wrapper,@|"most_split_Cartan"
+		,"(RealForm->CartanClass)");
+install_function(Cartan_involution_wrapper,@|"involution","(CartanClass->mat)");
+install_function(Cartan_info_wrapper,@|"Cartan_info"
+		,"(CartanClass->(int,int,int),"
+                 "vec,(int,int),(LieType,LieType,LieType))");
+install_function(real_forms_of_Cartan_wrapper,@|"real_forms"
+		,"(CartanClass->[RealForm])");
+install_function(dual_real_forms_of_Cartan_wrapper,@|"dual_real_forms"
+		,"(CartanClass->[DualRealForm])");
+install_function(fiber_part_wrapper,@|"fiber_part"
+		,"(CartanClass,RealForm->[int])");
+
 @*1 Elements of some $K\backslash G/B$ set.
 %
-Associated to each real form is a set $K\backslash G/B$, which was made
-available internally through the |real_form_value::kgb| method. We wish to
-make available externally a number of functions that operate on (among other
-data) elements of this set; for instance each element determines an
+Associated to each real form is a set $K\backslash G/B$, which was already
+made available internally through the |real_form_value::kgb| method. We wish
+to make available externally a number of functions that operate on (among
+other data) elements of this set; for instance each element determines an
 involution, corresponding imaginary and real subsystems of the root system,
 and a $\Z/2\Z$-grading of the imaginary root subsystem. It does not seem
 necessary to introduce a type for the set $K\backslash G/B$ (any function that
 needs it can take the corresponding real form as argument), but we do provide
-one for elements of that set. These elements contain a pointer |rf | to the
-|real_form_value| they were generated from, and thereby to the associated set
-$K\backslash G/B$, which allows operations relevant to the KGB element to be
-defined. Since this is a shared pointer, the |real_form_value| pointed to is
-guaranteed to exist as long as this |KGB_elt_value| does.
+one for elements of that set (if desired the user can collect such elements in
+an array). These elements contain a pointer |rf | to the |real_form_value| they
+were generated from, and thereby to the associated set $K\backslash G/B$,
+which allows operations relevant to the KGB element to be defined. Since this
+is a shared pointer, the |real_form_value| pointed to is guaranteed to exist
+as long as this |KGB_elt_value| does.
 
 @< Type definitions @>=
 struct KGB_elt_value : public value_base
 { shared_real_form rf;
   KGBElt val;
 @)
-  KGB_elt_value(shared_real_form form, KGBElt x) : rf(form), val(x) @+{}
+  KGB_elt_value(const shared_real_form& form, KGBElt x) : rf(form), val(x) @+{}
   ~KGB_elt_value() @+{}
 @)
   virtual void print(std::ostream& out) const;
@@ -2677,6 +2716,14 @@ void KGB_elt_wrapper(expression_base::level l)
     push_value(new KGB_elt_value(rf,i));
 }
 
+@ Working with KGB elements it may be necessary to access its real form.
+@< Local function def...@>=
+void real_form_of_KGB_wrapper(expression_base::level l)
+{ shared_KGB_elt x = get<KGB_elt_value>();
+  if (l!=expression_base::no_value)
+    push_value(x->rf);
+}
+
 @ One important attribute of KGB elements is the associated root datum
 involution.
 
@@ -2689,9 +2736,963 @@ void KGB_involution_wrapper(expression_base::level l)
     push_value(new matrix_value(G.involutionMatrix(kgb.involution(x->val))));
 }
 
-@*1 Kazhdan-Lusztig tables.
-We implement a simple function that gives raw access to the table of
-Kazhdan-Lusztig polynomials.
+@ Here is a function that returns the vector of bits that distinguish KGB
+elements in the fibre over the same involution.
+
+@< Local function def...@>=
+void torus_bits_wrapper(expression_base::level l)
+{ shared_KGB_elt x = get<KGB_elt_value>();
+  if (l!=expression_base::no_value)
+  { const KGB& kgb=x->rf->kgb();
+    TorusPart t = kgb.torus_part(x->val);
+    vector_value* p;
+    vector_ptr result(p=new vector_value(int_Vector(kgb.torus_rank(),0)));
+    for (unsigned int i=0; i<kgb.torus_rank(); ++i)
+      p->val[i]=t[i];
+    push_value(result);
+  }
+}
+
+@ It might be more useful to export the same value in a form that takes into
+account the base grading of the KGB set. The following function does that,
+returning the result in the form of a rational vector that should be
+interpreted in $({\bf Q}/2{\bf Z})^n$.
+
+@< Local function def...@>=
+void torus_factor_wrapper(expression_base::level l)
+{ shared_KGB_elt x = get<KGB_elt_value>();
+  if (l!=expression_base::no_value)
+  { const RealReductiveGroup& rf = x->rf->val;
+    const KGB& kgb=x->rf->kgb();
+    TorusElement t = kgb.torus_part_global(rf.rootDatum(),x->val);
+    rational_vector_ptr result(new rational_vector_value(t.log_pi(true)));
+    push_value(result);
+  }
+}
+
+@ We haven't defined much useful other things to do with KGB elements yet, but
+by popular request we make available the straightforward equality test.
+
+@< Local function def...@>=
+void KGB_equals_wrapper(expression_base::level l)
+{ shared_KGB_elt y = get<KGB_elt_value>();
+  shared_KGB_elt x = get<KGB_elt_value>();
+  if (l!=expression_base::no_value)
+    push_value(new bool_value(x->rf==y->rf and x->val==y->val));
+}
+
+@ Finally we install everything related to $K\backslash G/B$ elements.
+@< Install wrapper functions @>=
+install_function(KGB_elt_wrapper,@|"KGB","(RealForm,int->KGBElt)");
+install_function(real_form_of_KGB_wrapper,@|"real_form","(KGBElt->RealForm)");
+install_function(KGB_involution_wrapper,@|"involution","(KGBElt->mat)");
+install_function(torus_bits_wrapper,@|"torus_bits","(KGBElt->vec)");
+install_function(torus_factor_wrapper,@|"torus_factor","(KGBElt->ratvec)");
+install_function(KGB_equals_wrapper,@|"=","(KGBElt,KGBElt->bool)");
+
+@*1 Standard module parameters.
+%
+We implement a data type for holding parameters that represent standard
+modules. Such a parameter is defined by a triple $(x,\lambda,\nu)$ where $x$
+is a KGB element, $\lambda$ is a weight in the coset $\rho+X^*$ whose value is
+relevant only modulo the sub-lattice $(1-\theta_x)X^*$ where $\theta_x$ is the
+involution associated to $x$, and $\nu$ is a rational weight in the kernel of
+$1+\theta_x$. Such parameters are stored in instances of the class
+|StandardRepr|, which is defined in the file \.{repr.h}.
+
+@<Includes needed in the header file @>=
+#include "repr.h"
+
+@*2 Class definition.
+Like for KGB elements, we maintain a shared pointer to the real form value, so
+that it will be assured to survive as long as parameters for it exist, and we
+can access notably the |Rep_context| that it provides.
+
+@< Type definitions @>=
+struct module_parameter_value : public value_base
+{ shared_real_form rf;
+  StandardRepr val;
+@)
+  module_parameter_value(const shared_real_form& form, const StandardRepr& v)
+  : rf(form), val(v) @+{}
+  ~module_parameter_value() @+{}
+@)
+  virtual void print(std::ostream& out) const;
+  module_parameter_value* clone() const
+   @+ {@; return new module_parameter_value(*this); }
+  static const char* name() @+{@; return "module parameter"; }
+@)
+  const Rep_context& rc() const @+{@; return rf->rc(); }
+  Rep_table& rt() const @+{@; return rf->rt(); }
+private:
+  module_parameter_value(const module_parameter_value& v)  // copy constructor
+  : rf(v.rf),val(v.val) @+ {}
+};
+@)
+typedef std::auto_ptr<module_parameter_value> module_parameter_ptr;
+typedef std::tr1::shared_ptr<module_parameter_value> shared_module_parameter;
+
+@ When printing a module parameter, we shall indicate a triple
+$(x,\lambda,\nu)$ that defines it. Since we shall need to print |StandardRepr|
+values in other contexts as well, we shall define an auxiliary output function
+of such values first and then use that. The auxiliary function needs the
+|Rep_context|, so we pass that explicitly. Using the same name |print| for the
+auxiliary seems natural, but forces us to qualify upon calling.
+
+@f nu NULL
+
+@< Function def...@>=
+std::ostream& print
+  (std::ostream& out,const StandardRepr& val, const Rep_context& rc)
+{ RootNbr witness; // dummy needed in call
+  return
+  out << @< Expression for adjectives that apply to a module parameter @>@;@;
+@/    << " parameter (x="
+      << val.x() << ",lambda="
+      << rc.lambda(val) << ",nu="
+      << rc.nu(val) << ')';
+}
+@)
+void module_parameter_value::print(std::ostream& out) const
+{@; interpreter::print(out,val,rc()); }
+
+@ We provide one of the adjectives ``non-standard'' (when $\lambda$ fails to
+be imaginary-dominant; in this case little can be done with the parameter),
+``zero'' (the standard module vanishes due to the singular infinitesimal
+character, namely by the presence of a singular compact simple-imaginary
+root), ``non-final'' (the standard module is non-zero, but can be expressed in
+terms of standard modules at more compact Cartans using a singular real root
+satisfying the parity condition) or ``final'' (the good ones; the condition
+implies ``standard'' an ``non-zero'').
+
+@< Expression for adjectives... @>=
+( rc.is_standard(val,witness) ?
+    rc.is_zero(val,witness) ? "zero" :
+      rc.is_final(val,witness) ? "final" : "non-final"
+  : "non-standard" )
+
+@ To make a module parameter, one should provide a KGB element~$x$, an
+integral weight $\lambda-\rho$, and a rational weight~$\nu$. Since only its
+projection on the $-\theta_x$-stable subspace is used, one might specify the
+infinitesimal character $\gamma$ in the place of $\nu$.
+
+@< Local function def...@>=
+void module_parameter_wrapper(expression_base::level l)
+{ shared_rational_vector nu(get<rational_vector_value>());
+  shared_vector lam_rho(get<vector_value>());
+  shared_KGB_elt x(get<KGB_elt_value>());
+  if (nu->val.size()!=lam_rho->val.size()
+      or nu->val.size()!=x->rf->val.rank())
+    throw std::runtime_error ("Rank mismatch: ("
+        +str(x->rf->val.rank())+","
+	+str(lam_rho->val.size())+","+str(nu->val.size())+")");
+@.Rank mismatch@>
+  if (l!=expression_base::no_value)
+    push_value(new@| module_parameter_value(x->rf,
+      x->rf->rc().sr(x->val,lam_rho->val,nu->val)));
+}
+
+@ The following function, which we shall bind to the monadic operator `|%|',
+transforms a parameter value into a tuple of values that defines it. This
+tuple is not unique (since $\lambda$ is determined only modulo
+$(1-\theta_x)X^*$) and this function should make a unique choice. Whether that
+is really the case depends on the implementation of |StandardRepr|
+though; the current code, like the printing routine, just uses the methods to
+extract the components.
+
+@< Local function def...@>=
+void unwrap_parameter_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  if (l!=expression_base::no_value)
+  { push_value(new KGB_elt_value(p->rf,p->val.x()));
+    push_value(new vector_value(p->rc().lambda_rho(p->val)));
+    push_value(new rational_vector_value(p->rc().nu(p->val)));
+      // method |nu| normalises
+    if (l==expression_base::single_value)
+      wrap_tuple(3);
+  }
+}
+
+@ A crucial attribute of module parameters is their infinitesimal character.
+
+@< Local function def...@>=
+void infinitesimal_character_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  if (l!=expression_base::no_value)
+    push_value(new rational_vector_value(p->val.gamma()));
+}
+@)
+void real_form_of_parameter_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  if (l!=expression_base::no_value)
+    push_value(p->rf);
+}
+
+@ Here are some more attributes, in the form of predicates.
+
+@< Local function def...@>=
+void is_standard_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  RootNbr witness;
+  if (l!=expression_base::no_value)
+    push_value(new bool_value(p->rc().is_standard(p->val,witness)));
+}
+
+void is_zero_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  RootNbr witness;
+  if (l!=expression_base::no_value)
+    push_value(new bool_value(p->rc().is_zero(p->val,witness)));
+}
+
+void is_final_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  RootNbr witness;
+  if (l!=expression_base::no_value)
+    push_value(new bool_value(p->rc().is_final(p->val,witness)));
+}
+
+@ Before constructing (non-integral) blocks, it is essential that the
+infinitesimal character is made dominant, and that possible singular (simple)
+complex descents are applied to the parameter, as the result of the block
+construction will only be mathematically meaningful under these circumstances.
+This operation is therefore applied automatically in several places, but it is
+useful to give the user an easy way to apply it explicitly.
+
+Testing for equivalence of parameters amounts to testing for equality after
+the parameters are made dominant (at least that claim was not contested at the
+time of writing this). We provide this test, which will be bound to the
+equality operator.
+
+@< Local function def...@>=
+void parameter_dominant_wrapper(expression_base::level l)
+{ shared_module_parameter p = get_own<module_parameter_value>();
+  if (l!=expression_base::no_value)
+  { p->rc().make_dominant(p->val);
+    push_value(p);
+  }
+}
+
+void parameter_equivalent_wrapper(expression_base::level l)
+{ shared_module_parameter q = get<module_parameter_value>();
+  shared_module_parameter p = get<module_parameter_value>();
+  if (p->rf!=q->rf)
+    throw std::runtime_error @|
+      ("Real form mismatch when testing equivalence");
+  if (l!=expression_base::no_value)
+  { StandardRepr z0=p->val, z1=q->val; // copy
+    p->rc().make_dominant(z0); q->rc().make_dominant(z1);
+    push_value(new bool_value(z0==z1));
+  }
+}
+
+@ The library can also compute orientation numbers for parameters.
+
+@< Local function def...@>=
+void orientation_number_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  if (l!=expression_base::no_value)
+    push_value(new int_value(p->rc().orientation_number(p->val)));
+}
+
+@ Here is a function that computes a list of positive rational values $t\leq1$
+such that the parameter obtained by replacing the continuous part~$\nu$ of
+by~$t\nu$ is not topmost in its block, so that deformation of the parameter to
+$t\nu$ will produce a non-trivial decomposition.
+
+@< Local function def...@>=
+void reducibility_points_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  if (l!=expression_base::no_value)
+  {
+    RationalList rp = p->rc().reducibility_points(p->val);
+    row_ptr result(new row_value(rp.size()));
+    for (size_t i=0; i<rp.size(); ++i)
+      result->val[i]=shared_value(new rat_value(rp[i]));
+    push_value(result);
+  }
+}
+
+@ One of the main reasons to introduce module parameter values is that they
+allow computing a block, whose elements are again given by module parameters.
+Before we define the functions the do that, let us define a common function
+they will use to test a parameter for validity. Even though we shall always
+have a pointer available when we call |test_standard|, we define this function
+to take a reference (requiring us to write a dereferencing at each call),
+because the type of pointer (shared or raw) available is not always the same.
+The reference is of course not owned by |test_standard|.
+
+@< Local function def...@>=
+void test_standard(const module_parameter_value& p)
+{ RootNbr witness;
+  if (p.rc().is_standard(p.val,witness))
+    return;
+  std::ostringstream os; p.print(os);
+  os << "\nParameter not standard, negative on coroot #" << witness;
+  throw std::runtime_error(os.str());
+}
+
+@ Here is the first block generating function, which just reproduces to output
+from the \.{atlas} program for the \.{nblock} command.
+
+@< Local function def...@>=
+void print_n_block_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  BlockElt init_index; // will hold index in the block of the initial element
+  non_integral_block block(p->rc(),p->val,init_index);
+  *output_stream << "Parameter defines element " << init_index
+               @|<< " of the following block:" << std::endl;
+  block.print_to(*output_stream,true);
+    // print block using involution expressions
+  block_io::print_KL(*output_stream,block,init_index);
+  if (l==expression_base::single_value)
+    wrap_tuple(0);
+}
+
+@ More interesting than printing the block is to return is to the user as a
+list of parameter values. The following function does this, and adds as a
+second result the index that the original parameter has in the result.
+
+@< Local function def...@>=
+void n_block_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  if (l!=expression_base::no_value)
+  {
+    BlockElt start; // will hold index in the block of the initial element
+    non_integral_block block(p->rc(),p->val,start);
+    @< Push a list of parameter values for the elements of |block| @>
+    push_value(new int_value(start));
+    if (l==expression_base::single_value)
+      wrap_tuple(2);
+  }
+}
+
+@ Construction a list of values is a routine affair. This code must however
+also construct a module parameter value for each element of |block|.
+
+@< Push a list of parameter values for the elements of |block| @>=
+{ row_ptr param_list (new row_value(block.size()));
+  const RatWeight& gamma=block.gamma();
+  for (BlockElt z=0; z<block.size(); ++z)
+  { StandardRepr block_elt_param =
+      p->rc().sr(block.parent_x(z),block.lambda_rho(z),gamma);
+    param_list->val[z] =
+	shared_value(new module_parameter_value(p->rf,block_elt_param));
+  }
+  push_value(param_list);
+
+}
+
+@ Here is a version of the same command that also exports the table of
+Kazhdan-Lusztig polynomials for the block, in the same form as \\{raw\_KL}
+that will be defined below.
+
+@< Local function def...@>=
+void KL_block_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  if (l!=expression_base::no_value)
+  {
+    BlockElt start; // will hold index in the block of the initial element
+    non_integral_block block(p->rc(),p->val,start);
+    @< Push a list of parameter values for the elements of |block| @>
+    push_value(new int_value(start));
+    const kl::KLContext& klc = block.klc(block.size()-1,false);
+
+    matrix_ptr M(new matrix_value(int_Matrix(klc.size())));
+    for (size_t y=1; y<klc.size(); ++y)
+      for (size_t x=0; x<y; ++x)
+        M->val(x,y)= klc.KL_pol_index(x,y);
+@)
+    row_ptr polys(new row_value(0)); polys->val.reserve(klc.polStore().size());
+    for (size_t i=0; i<klc.polStore().size(); ++i)
+    {
+      const kl::KLPol& pol = klc.polStore()[i];
+      std::vector<int> coeffs(pol.size());
+      for (size_t j=pol.size(); j-->0; )
+        coeffs[j]=pol[j];
+      polys->val.push_back(shared_value(new vector_value(coeffs)));
+    }
+@)
+    vector_ptr length_stops(new vector_value(
+       int_Vector(block.length(block.size()-1)+1)));
+    length_stops->val[0]=0;
+    for (size_t i=1; i<length_stops->val.size(); ++i)
+      length_stops->val[i]=block.length_first(i);
+@)
+    unsigned n_survivors=0;
+    for (BlockElt z=0; z<block.size(); ++z)
+      if (block.survives(z))
+        ++n_survivors;
+    vector_ptr survivor(new vector_value(int_Vector(n_survivors)));
+    { unsigned i=0;
+      for (BlockElt z=0; z<block.size(); ++z)
+        if (block.survives(z))
+          survivor->val[i++]=z;
+      assert(i==n_survivors);
+    }
+    matrix_ptr contributes_to(new matrix_value(
+      int_Matrix(n_survivors,block.size(),0)));
+    for (BlockElt z=0; z<block.size(); ++z)
+    { BlockEltList sb = block.survivors_below(z);
+      for (BlockEltList::const_iterator it=sb.begin(); it!=sb.end(); ++it)
+      { BlockElt x= permutations::find_index<int>(survivor->val,*it);
+          // a row index
+        if ((block.length(z)-block.length(*it))%2==0)
+          ++contributes_to->val(x,z);
+        else
+          --contributes_to->val(x,z);
+      }
+    }
+@)
+    push_value(M);
+    push_value(polys);
+    push_value(length_stops);
+    push_value(survivor);
+    push_value(contributes_to);
+
+    if (l==expression_base::single_value)
+      wrap_tuple(7);
+  }
+}
+
+@ Here is a version of the same command that just computes a partial block,
+and the Kazhdan-Lusztig polynomials for that block. There are six components
+in the value returned: the list of parameters forming the partial block (of
+which the final one is the initial parameter), a matrix of KL-polynomial
+indices, a list of polynomials (as vectors), a vector of length stops (block
+element numbers at with the length function increases), a list of block
+element numbers for those whose survive the translation-to-singular functor,
+and a matrix that indicates which block elements contributes to which
+surviving element.
+
+@< Local function def...@>=
+void partial_block_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  if (l!=expression_base::no_value)
+  {
+    non_integral_block block(p->rc(),p->val);
+    @< Push a list of parameter values for the elements of |block| @>
+
+    const kl::KLContext& klc = block.klc(block.size()-1,false);
+    // compute KL polynomials, silently
+
+    matrix_ptr M(new matrix_value(int_Matrix(klc.size())));
+    for (size_t y=1; y<klc.size(); ++y)
+      for (size_t x=0; x<y; ++x)
+        M->val(x,y)= klc.KL_pol_index(x,y);
+@)
+    row_ptr polys(new row_value(0)); polys->val.reserve(klc.polStore().size());
+    for (size_t i=0; i<klc.polStore().size(); ++i)
+    {
+      const kl::KLPol& pol = klc.polStore()[i];
+      std::vector<int> coeffs(pol.size());
+      for (size_t j=pol.size(); j-->0; )
+        coeffs[j]=pol[j];
+      polys->val.push_back(shared_value(new vector_value(coeffs)));
+    }
+@)
+    vector_ptr length_stops(new vector_value(
+       int_Vector(block.length(block.size()-1)+1)));
+    length_stops->val[0]=0;
+    for (size_t i=1; i<length_stops->val.size(); ++i)
+      length_stops->val[i]=block.length_first(i);
+@)
+    unsigned n_survivors=0;
+    for (BlockElt z=0; z<block.size(); ++z)
+      if (block.survives(z))
+        ++n_survivors;
+    vector_ptr survivor(new vector_value(int_Vector(n_survivors)));
+    { unsigned i=0;
+      for (BlockElt z=0; z<block.size(); ++z)
+        if (block.survives(z))
+          survivor->val[i++]=z;
+      assert(i==n_survivors);
+    }
+    matrix_ptr contributes_to(new matrix_value(
+      int_Matrix(n_survivors,block.size(),0)));
+    for (BlockElt z=0; z<block.size(); ++z)
+    { BlockEltList sb = block.survivors_below(z);
+      for (BlockEltList::const_iterator it=sb.begin(); it!=sb.end(); ++it)
+      { BlockElt x= permutations::find_index<int>(survivor->val,*it);
+          // a row index
+        if ((block.length(z)-block.length(*it))%2==0)
+          ++contributes_to->val(x,z);
+        else
+          --contributes_to->val(x,z);
+      }
+    }
+@)
+    push_value(M);
+    push_value(polys);
+    push_value(length_stops);
+    push_value(survivor);
+    push_value(contributes_to);
+
+    if (l==expression_base::single_value)
+      wrap_tuple(6);
+  }
+}
+
+@ Finally we install everything related to module parameters.
+@< Install wrapper functions @>=
+install_function(module_parameter_wrapper,@|"param"
+                ,"(KGBElt,vec,ratvec->Param)");
+install_function(unwrap_parameter_wrapper,@|"%"
+                ,"(Param->KGBElt,vec,ratvec)");
+install_function(infinitesimal_character_wrapper,@|"infinitesimal_character"
+                ,"(Param->ratvec)");
+install_function(real_form_of_parameter_wrapper,@|"real_form"
+		,"(Param->RealForm)");
+install_function(is_standard_wrapper,@|"is_standard" ,"(Param->bool)");
+install_function(is_zero_wrapper,@|"is_zero" ,"(Param->bool)");
+install_function(is_final_wrapper,@|"is_final" ,"(Param->bool)");
+install_function(parameter_dominant_wrapper,@|"dominant" ,"(Param->Param)");
+install_function(parameter_equivalent_wrapper,@|"=" ,"(Param,Param->bool)");
+install_function(orientation_number_wrapper,@|"orientation_nr" ,"(Param->int)");
+install_function(reducibility_points_wrapper,@|
+		"reducibility_points" ,"(Param->[rat])");
+install_function(print_n_block_wrapper,@|"print_n_block"
+                ,"(Param->)");
+install_function(n_block_wrapper,@|"n_block" ,"(Param->[Param],int)");
+install_function(KL_block_wrapper,@|"KL_block"
+                ,"(Param->[Param],int,mat,[vec],vec,vec,mat)");
+install_function(partial_block_wrapper,@|"partial_block"
+                ,"(Param->[Param],mat,[vec],vec,vec,mat)");
+
+@*1 Polynomials formed from parameters.
+%
+When working with parameters for standard modules, and notably with the
+deformation formulas, the need arises to keep track of formal sums of
+standard modules with coefficients of a type that allows keeping track of the
+signatures of the modules. These coefficients, which we shall call split
+integers and give the type \.{Split} in \.{realex}, are elements of the group
+algebra over $\Z$ of a (cyclic) group of order~$2$.
+
+@< Includes needed in the header file @>=
+#include "arithmetic.h"
+
+@*2 A class for split integers.
+Although the necessary operations could easily be defined in the \.{realex}
+programming language using pairs of integers, it is preferable to make them a
+built-in type, since this allows distinguishing them from pairs of integers
+used for other purposes, and to provide special output and conversion
+facilities.
+
+@< Type definitions @>=
+
+struct split_int_value : public value_base
+{ Split_integer val;
+@)
+  explicit split_int_value(Split_integer v) : val(v) @+ {}
+  ~split_int_value()@+ {}
+  void print(std::ostream& out) const;
+  split_int_value* clone() const @+{@; return new split_int_value(*this); }
+  static const char* name() @+{@; return "split integer"; }
+private:
+  split_int_value(const split_int_value& v) : val(v.val) @+{}
+};
+@)
+typedef std::auto_ptr<split_int_value> split_int_ptr;
+typedef std::tr1::shared_ptr<split_int_value> shared_split_int;
+
+@ Like for parameter values, we first define a printing function on the level
+of a bare |Split_integer| value, which can be used in situations where the
+method |split_int_value::print| cannot. We simplify output in the (common?)
+case of values that are multiples of $1\pm s$.
+
+@< Function def...@>=
+std::ostream& print (std::ostream& out, const Split_integer& val)
+{ if (val.e()==-val.s() or val.e()==val.s())
+  { if (arithmetic::abs(val.e())<=1)
+      out << (val.e()==1 ? '+' : val.e()==0 ? '0' : '-');
+    else out << (val.e()<0?'-':'+') << abs(val.e());
+    out << "(1" << (val.e()==-val.s() ? '-' : '+') << "s)";
+  }
+  else
+     out << '(' << val.e() << (val.s()<0?'-':'+') << abs(val.s()) << "s)";
+  return out;
+}
+@)
+void split_int_value::print(std::ostream& out) const
+{@; interpreter::print(out,val); }
+
+@ Here are the basic arithmetic operations.
+
+@< Local function definitions @>=
+
+void split_plus_wrapper(expression_base::level l)
+{ Split_integer j=get<split_int_value>()->val;
+  shared_split_int i=get_own<split_int_value>();
+  if (l!=expression_base::no_value)
+  {@; i->val+=j; push_value(i); }
+}
+@)
+void split_minus_wrapper(expression_base::level l)
+{ Split_integer j=get<split_int_value>()->val;
+  shared_split_int i=get_own<split_int_value>();
+  if (l!=expression_base::no_value)
+  {@; i->val-=j; push_value(i); }
+}
+@)
+void split_unary_minus_wrapper(expression_base::level l)
+{ shared_split_int i=get_own<split_int_value>();
+  if (l!=expression_base::no_value)
+  {@; i->val.negate(); push_value(i); }
+}
+@)
+void split_times_wrapper(expression_base::level l)
+{ Split_integer j=get<split_int_value>()->val;
+  Split_integer i=get<split_int_value>()->val;
+  if (l!=expression_base::no_value)
+    push_value(new split_int_value(i*j));
+}
+
+@ We also provide implicit conversions from integers or pairs of integers to
+split integers, and an explicit operator for converting back to a pair.
+
+@< Local function definitions @>=
+
+void int_to_split_coercion()
+{ int a=get<int_value>()->val;
+  push_value(new split_int_value(Split_integer(a)));
+}
+@)
+void pair_to_split_coercion()
+{ push_tuple_components();
+  int b=get<int_value>()->val;
+  int a=get<int_value>()->val;
+  push_value(new split_int_value(Split_integer(a,b)));
+}
+@)
+void from_split_wrapper(expression_base::level l)
+{ Split_integer si = get<split_int_value>()->val;
+  if (l!=expression_base::no_value)
+  {  push_value(new int_value(si.e()));
+     push_value(new int_value(si.s()));
+     if (l==expression_base::single_value)
+       wrap_tuple(2);
+  }
+}
+
+@*2 Class definition for virtual modules.
+%
+The library provides a type |repr::SR_poly| in which such sums can be
+efficiently maintained. In order to use it we must have seen the header file
+for the module \.{free\_abelian} on which the implementation is based.
+
+@< Includes needed in the header file @>=
+#include "free_abelian.h" // needed to make |repr::SR_poly| a complete type
+
+@ Like for KGB elements, we maintain a shared pointer to the real form value, so
+that it will be assured to survive as long as parameters for it exist.
+
+@< Type definitions @>=
+struct virtual_module_value : public value_base
+{ shared_real_form rf;
+  repr::SR_poly val;
+@)
+  virtual_module_value(const shared_real_form& form, const repr::SR_poly& v)
+  : rf(form), val(v) @+{}
+  ~virtual_module_value() @+{}
+@)
+  virtual void print(std::ostream& out) const;
+  virtual_module_value* clone() const
+   @+ {@; return new virtual_module_value(*this); }
+  static const char* name() @+{@; return "module parameter"; }
+@)
+  const Rep_context& rc() const @+{@; return rf->rc(); }
+  repr::Rep_context& rt() const @+{@; return rf->rt(); }
+private:
+  virtual_module_value(const virtual_module_value& v)
+  @+ : rf(v.rf),val(v.val) @+{} // copy
+};
+@)
+typedef std::auto_ptr<virtual_module_value> virtual_module_ptr;
+typedef std::tr1::shared_ptr<virtual_module_value> shared_virtual_module;
+
+@ When printing a virtual module value, we traverse the |std::map| that is
+hidden in the |Free_Abelian| class template, and print individual terms using
+the auxiliary function that was defined above for printing parameter values.
+
+@h <iomanip> // for |std::setw|
+@< Function def...@>=
+void virtual_module_value::print(std::ostream& out) const
+{ if (val.empty())
+    out << "Empty sum of standard modules";
+  else
+    for (repr::SR_poly::const_iterator it=val.begin(); it!=val.end(); ++it)
+    { interpreter::print(out << '\n',it->second); // print coefficient
+      interpreter::print(out << '*',it->first,rc()); // print parameter
+    }
+}
+
+@ To start off a |virtual_module_value|, one usually takes an empty sum, but
+one needs to specify a real form to fill the |rf| field. The information
+allows us to extract the real form from a virtual module even if it is empty.
+We allow testing the number of terms of the sum, notably for testing the sum
+to be empty.
+
+@< Local function def...@>=
+void virtual_module_wrapper(expression_base::level l)
+{ shared_real_form rf (get<real_form_value>());
+  if (l!=expression_base::no_value)
+    push_value(new@|
+       virtual_module_value(rf,repr::SR_poly(rf->rc().repr_less())));
+}
+@)
+void real_form_of_virtual_module_wrapper(expression_base::level l)
+{ shared_virtual_module m = get<virtual_module_value>();
+  if (l!=expression_base::no_value)
+    push_value(m->rf);
+}
+@)
+void virtual_module_size_wrapper(expression_base::level l)
+{ shared_virtual_module m = get<virtual_module_value>();
+  if (l!=expression_base::no_value)
+    push_value(new int_value(m->val.size()));
+}
+
+@ Here is function to extract the coefficient (multiplicity) of a given
+parameter in a virtual module. It is bound to the array subscription syntax,
+and therefor implemented as the |evaluate| method of the appropriate class
+derived from |subscr_base|.
+
+@ In a subscription of a polynomial by a parameter, the arguments are not
+initially on the stack, but come from evaluating the |array| and |index|
+fields of the |module_coefficient| expression.
+
+@h "evaluator.h" // for |module_coefficient|
+
+@< Function def... @>=
+void module_coefficient::evaluate(level l) const
+{ shared_virtual_module m = (array->eval(),get<virtual_module_value>());
+  shared_module_parameter p = (index->eval(),get<module_parameter_value>());
+  if (l!=expression_base::no_value)
+    push_value(new split_int_value(m->val[p->val]));
+}
+
+@ We also allow implicitly converting a parameter to a virtual module.
+
+@< Local function def...@>=
+void param_to_poly()
+{ shared_module_parameter p = get<module_parameter_value>();
+@/test_standard(*p);
+  const shared_real_form& rf=p->rf;
+  push_value(new@|
+    virtual_module_value(rf,rf->rc().expand_final(p->val)));
+}
+
+@ The main operations for virtual modules are addition and subtraction of
+parameters, or of other virtual modules.
+
+@< Local function def...@>=
+void add_module_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  shared_virtual_module accumulator = get_own<virtual_module_value>();
+@/test_standard(*p);
+  if (accumulator->rf!=p->rf)
+    throw std::runtime_error @|
+      ("Real form mismatch when adding standard module to a module");
+  if (l!=expression_base::no_value)
+  @/{@; accumulator->val+= p->rc().expand_final(p->val);
+    push_value(accumulator);
+  }
+}
+
+void add_module_term_wrapper(expression_base::level l)
+{ push_tuple_components(); // second argument is a pair |(coef,p)|
+  shared_module_parameter p = get_own<module_parameter_value>();
+  Split_integer coef=get<split_int_value>()->val;
+  shared_virtual_module accumulator = get_own<virtual_module_value>();
+@/test_standard(*p);
+  if (accumulator->rf!=p->rf)
+    throw std::runtime_error @|
+      ("Real form mismatch when adding a term to a module");
+  if (l!=expression_base::no_value)
+  @/{@; accumulator->val.add_multiple(p->rc().expand_final(p->val),coef);
+    push_value(accumulator);
+  }
+}
+
+@ Although we initially envisioned allowing conversion from a list of terms to
+a virtual module, this could not be defined since it is not possible to not
+know the real form in case the list of terms is empty (a conversion in the
+opposite direction is given below). Therefore we provide instead the addition
+of an entire list of terms at once to a virtual module value.
+
+@< Local function... @>=
+void add_module_termlist_wrapper(expression_base::level l)
+{ shared_row r = get<row_value>();
+  shared_virtual_module accumulator = get_own<virtual_module_value>();
+  if (l!=expression_base::no_value)
+  { for (std::vector<shared_value>::const_iterator
+           it=r->val.begin(); it!=r->val.end(); ++it)
+    { const tuple_value* t = force<tuple_value>(it->get());
+      Split_integer coef=force<split_int_value>(t->val[0].get())->val;
+      const module_parameter_value* p =
+        force<module_parameter_value>(t->val[1].get());
+@/    test_standard(*p);
+      if (accumulator->rf!=p->rf)
+        throw std::runtime_error @|
+          ("Real form mismatch when adding terms to a module");
+      accumulator->val.add_multiple(p->rc().expand_final(p->val),coef);
+     }
+    push_value(accumulator);
+  }
+}
+
+@ Naturally we also want to define addition and scalar multiplication of
+virtual modules. Scalar multiplication potentially makes coefficients zero, in
+which case the corresponding terms need to be removed to preserve the
+invariant that no zero terms are stored in a virtual module. For integer
+multiplication we just need to check for multiplication by $0$ and destroy the
+whole module when this happens. However it is somewhat subtler for scalar
+multiplication by split integers, because these have zero divisors. Therefore
+we test each coefficient produced by multiplication in this case, and remove
+the term when the coefficient becomes zero. We must take care to advance the
+iterator ``manually'' before doing that, and as a consequence cannot as usual
+advance the iterator in the |for| clause.
+
+@< Local function... @>=
+void add_virtual_modules_wrapper(expression_base::level l)
+{ shared_virtual_module accumulator = get_own<virtual_module_value>();
+  shared_virtual_module addend = get<virtual_module_value>();
+  if (accumulator->rf!=addend->rf)
+    throw std::runtime_error @|("Real form mismatch when adding two modules");
+  if (l!=expression_base::no_value)
+  { for (repr::SR_poly::const_iterator
+         it=addend->val.begin(); it!=addend->val.end(); ++it)
+      accumulator->val.add_term(it->first,it->second);
+    push_value(accumulator);
+  }
+}
+@)
+void int_mult_virtual_module_wrapper(expression_base::level l)
+{ shared_virtual_module m = get_own<virtual_module_value>();
+  int c = get<int_value>()->val;
+  if (l!=expression_base::no_value)
+  { if (c==0)
+      m->val.clear(); // avoid creating null terms into an |SR_poly|
+    else
+      for (repr::SR_poly::iterator it=m->val.begin(); it!=m->val.end(); ++it)
+        it->second *= c;
+    push_value(m);
+  }
+}
+@)
+void split_mult_virtual_module_wrapper(expression_base::level l)
+{ shared_virtual_module m = get_own<virtual_module_value>();
+  Split_integer c = get<split_int_value>()->val;
+  if (l!=expression_base::no_value)
+  { for (repr::SR_poly::iterator it=m->val.begin(); it!=m->val.end(); )
+      // no |++it| here!
+      if ((it->second *= c)==Split_integer(0,0))
+	m->val.erase(it++); // advance, then delete the node just abandoned
+      else ++it;
+    push_value(m);
+  }
+}
+
+@ Here is our principal application of virtual modules.
+%
+Using the computation of non-integral blocks, we can compute a deformation
+formula for the given parameter. This also involves computing Kazhdan-Lusztig
+polynomials, which happens inside the method |deformation_terms|, and produces
+an expression for the ``deformed'' parameter (meaning $\nu$ is infinitesimally
+decreased towards~$0$) in terms of certain other parameters found in the
+block.
+
+@< Local function def...@>=
+void deform_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  if (l!=expression_base::no_value)
+  {
+    non_integral_block block(p->rc(),p->val); // partial block construction
+    repr::SR_poly terms
+       = p->rt().deformation_terms(block,block.size()-1);
+
+    virtual_module_ptr acc
+      (new virtual_module_value(p->rf, repr::SR_poly(p->rc().repr_less())));
+    for (repr::SR_poly::const_iterator it=terms.begin(); it!=terms.end(); ++it)
+      acc->val.add_multiple(p->rc().expand_final(it->first),it->second);
+
+    push_value(acc);
+  }
+}
+
+@ Here is a recursive form of this deformation, which stores intermediate
+results for efficiency in a |Rep_table| structure. Though this structure
+should really be associated to and saved with the real form, we currently hold
+it in a local variable of this wrapper function.
+
+@< Local function def...@>=
+void full_deform_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  if (l!=expression_base::no_value)
+  {
+    repr::SR_poly result = p->rt().deformation(p->val);
+    push_value (new virtual_module_value(p->rf,result));
+  }
+}
+
+@ And here is another way to invoke the Kazhdan-Lusztig computations, which
+given a parameter corresponding to $y$ will obtain the formal sum of
+Kazhdan-Lusztig polynomials $P_{x,y}$ where $x$ ranges over the values in the
+block of $y$ (or the Bruhat interval below $y$, where all those giving a
+nonzero contribution are located), multiplied by a sign and evaluated at the
+split integer unit~$s$ (since it appears that the information most frequently
+needed can be extracted from that evaluation. In formula, this computes
+$$
+  \sum_{x\leq y}(-1)^{l(y)-l(x)}P_{x,y}[q:=s]
+$$
+@< Local function def...@>=
+void KL_sum_at_s_wrapper(expression_base::level l)
+{ shared_module_parameter p = get<module_parameter_value>();
+  test_standard(*p);
+  if (l!=expression_base::no_value)
+  {
+    repr::SR_poly result = p->rt().KL_column_at_s(p->val);
+    push_value (new virtual_module_value(p->rf,result));
+  }
+}
+
+
+
+@ Finally we install everything related to polynomials formed from parameters.
+@< Install wrapper functions @>=
+install_function(split_plus_wrapper,@|"+","(Split,Split->Split)");
+install_function(split_minus_wrapper,@|"-","(Split,Split->Split)");
+install_function(split_unary_minus_wrapper,@|"-","(Split->Split)");
+install_function(split_times_wrapper,@|"*","(Split,Split->Split)");
+install_function(from_split_wrapper,@|"%","(Split->int,int)");
+install_function(virtual_module_wrapper,@|"null_module","(RealForm->ParamPol)");
+install_function(real_form_of_virtual_module_wrapper,@|"real_form"
+		,"(ParamPol->RealForm)");
+install_function(virtual_module_size_wrapper,@|"#","(ParamPol->int)");
+install_function(add_module_wrapper,@|"+","(ParamPol,Param->ParamPol)");
+install_function(add_module_term_wrapper,@|"+"
+		,"(ParamPol,(Split,Param)->ParamPol)");
+install_function(add_module_termlist_wrapper,@|"+"
+		,"(ParamPol,[(Split,Param)]->ParamPol)");
+install_function(add_virtual_modules_wrapper,@|"+"
+		,"(ParamPol,ParamPol->ParamPol)");
+install_function(int_mult_virtual_module_wrapper,@|"*"
+		,"(int,ParamPol->ParamPol)");
+install_function(split_mult_virtual_module_wrapper,@|"*"
+		,"(Split,ParamPol->ParamPol)");
+install_function(deform_wrapper,@|"deform" ,"(Param->ParamPol)");
+install_function(full_deform_wrapper,@|"full_deform","(Param->ParamPol)");
+install_function(KL_sum_at_s_wrapper,@|"KL_sum_at_s","(Param->ParamPol)");
+
+
+@*1 Kazhdan-Lusztig tables. We implement a simple function that gives raw
+access to the table of Kazhdan-Lusztig polynomials.
 
 @< Local function def...@>=
 void raw_KL_wrapper (expression_base::level l)
@@ -2714,14 +3715,9 @@ void raw_KL_wrapper (expression_base::level l)
   if (l==expression_base::no_value)
     return;
   matrix_ptr M(new matrix_value(int_Matrix(klc.size())));
-  const kl::KLPol* base_pt = &klc.polStore()[0];
   for (size_t y=1; y<klc.size(); ++y)
     for (size_t x=0; x<y; ++x)
-    {
-      const kl::KLPol& pol = klc.klPol(x,y);
-      if (not pol.isZero()) // exception needed: zero need not be from table
-        M->val(x,y)= &pol-base_pt;
-    }
+      M->val(x,y) = klc.KL_pol_index(x,y);
 @)
   row_ptr polys(new row_value(0)); polys->val.reserve(klc.polStore().size());
   for (size_t i=0; i<klc.polStore().size(); ++i)
@@ -2796,6 +3792,23 @@ void raw_dual_KL_wrapper (expression_base::level l)
     wrap_tuple(2);
 }
 
+@* Installing coercions.
+%
+We collect here all coercions related to specific Atlas types. They
+necessitate variables that hold the type of several built-in types occurring
+in these coercions, which we define as |static| variables her as well.
+
+@< Install coercions @>=
+{
+  coercion(str_type,Lie_type_type,"LT",Lie_type_coercion);
+  coercion(ic_type,rd_type,"RdIc",inner_class_to_root_datum_coercion);
+  coercion(rf_type,ic_type,"IcRf",real_form_to_inner_class_coercion);
+  coercion(rf_type,rd_type,"RdRf",real_form_to_root_datum_coercion);
+  coercion(int_type,split_type,"SpI",int_to_split_coercion);
+  coercion(int_int_type,split_type,"Sp(I,I)",pair_to_split_coercion);
+  coercion(param_type,param_pol_type,"PolP",param_to_poly);
+}
+
 
 @* Test functions.
 %
@@ -2852,8 +3865,8 @@ We shall next implement the \.{block} command.
 
 @< Local function def...@>=
 void print_block_wrapper(expression_base::level l)
-{ shared_dual_real_form drf(get<dual_real_form_value>());
-  shared_real_form rf(get<real_form_value>());
+{ shared_dual_real_form drf=get<dual_real_form_value>();
+  shared_real_form rf=get<real_form_value>();
 @)
   if (&rf->parent.val!=&drf->parent.val)
     throw std::runtime_error @|
@@ -2865,8 +3878,7 @@ void print_block_wrapper(expression_base::level l)
     ("Real form and dual real form are incompatible");
 @.Real form and dual...@>
 @)
-  block_io::print_block(*output_stream,
-    Block::build(rf->val,drf->val));
+  Block::build(rf->val,drf->val).print_to(*output_stream,false);
 @)
   if (l==expression_base::single_value)
     wrap_tuple(0);
@@ -2890,8 +3902,7 @@ void print_blockd_wrapper(expression_base::level l)
     ("Real form and dual real form are incompatible");
 @.Real form and dual...@>
 @)
-  block_io::printBlockD(*output_stream,
-    Block::build(rf->val,drf->val));
+  Block::build(rf->val,drf->val).print_to(*output_stream,true);
 @)
   if (l==expression_base::single_value)
     wrap_tuple(0);
@@ -3142,73 +4153,10 @@ void print_W_graph_wrapper(expression_base::level l)
     wrap_tuple(0);
 }
 
-@ The function |test_representation| serves to experiment with the input of
-general representation parameters and the computation of the corresponding
-pair $(x,y)$. The code below should be modified so as to use only the integral
-system defined by the infinitesimal character~$\gamma$.
 
-@h "repr.h"
-
-@< Local function def...@>=
-void test_rep_wrapper(expression_base::level l)
-{
-  shared_rational_vector nu =get<rational_vector_value>();
-  shared_vector lambda_rho = get<vector_value>();
-  shared_KGB_elt x = get<KGB_elt_value>();
-
-  RealReductiveGroup& G = x->rf->val;
-  repr::Rep_context rc(G);
-@)
-  repr::StandardRepr sr = rc.sr(x->val,lambda_rho->val,nu->val);
-  std::cout << "infinitesimal character: " << sr.gamma() << std::endl;
-  GlobalTitsElement y=rc.y(sr);
-  ComplexReductiveGroup dual_G(G.complexGroup(),tags::DualTag());
-  kgb::global_KGB dual_KGB (dual_G,y);
-  *output_stream << "y is element " << dual_KGB.lookup(y)
-                 << " in dual KGB set:\n";
-  kgb_io::print_X(*output_stream,dual_KGB);
-@)
-  if (l==expression_base::single_value)
-    wrap_tuple(0);
-}
-
-@ Finally we install everything (where did we hear that being said before?)
+@ Finally we install everything remaining.
 
 @< Install wrapper functions @>=
-install_function(real_form_wrapper,@|"real_form","(InnerClass,int->RealForm)");
-install_function(quasisplit_form_wrapper,@|"quasisplit_form"
-		,"(InnerClass->RealForm)");
-install_function(class_of_real_group_wrapper
-                ,@|"inner_class","(RealForm->InnerClass)");
-install_function(components_rank_wrapper,@|"components_rank","(RealForm->int)");
-install_function(count_Cartans_wrapper,@|"count_Cartans","(RealForm->int)");
-install_function(KGB_size_wrapper,@|"KGB_size","(RealForm->int)");
-install_function(Cartan_order_matrix_wrapper,@|"Cartan_order"
-					    ,"(RealForm->mat)");
-install_function(dual_real_form_wrapper,@|"dual_real_form"
-				       ,"(InnerClass,int->DualRealForm)");
-install_function(dual_quasisplit_form_wrapper,@|"dual_quasisplit_form"
-		,"(InnerClass->DualRealForm)");
-install_function(real_form_from_dual_wrapper,@|"real_form"
-				  ,"(DualRealForm->RealForm)");
-install_function(ic_Cartan_class_wrapper,@|"Cartan_class"
-		,"(InnerClass,int->CartanClass)");
-install_function(rf_Cartan_class_wrapper,@|"Cartan_class"
-		,"(RealForm,int->CartanClass)");
-install_function(most_split_Cartan_wrapper,@|"most_split_Cartan"
-		,"(RealForm->CartanClass)");
-install_function(Cartan_involution_wrapper,@|"involution","(CartanClass->mat)");
-install_function(Cartan_info_wrapper,@|"Cartan_info"
-		,"(CartanClass->(int,int,int),"
-                 "vec,(int,int),(LieType,LieType,LieType))");
-install_function(real_forms_of_Cartan_wrapper,@|"real_forms"
-		,"(CartanClass->[RealForm])");
-install_function(dual_real_forms_of_Cartan_wrapper,@|"dual_real_forms"
-		,"(CartanClass->[DualRealForm])");
-install_function(fiber_part_wrapper,@|"fiber_part"
-		,"(CartanClass,RealForm->[int])");
-install_function(KGB_elt_wrapper,@|"KGB","(RealForm,int->KGBElt)");
-install_function(KGB_involution_wrapper,@|"involution","(KGBElt->mat)");
 install_function(raw_KL_wrapper,@|"raw_KL"
                 ,"(RealForm,DualRealForm->mat,[vec],vec)");
 install_function(raw_dual_KL_wrapper,@|"dual_KL"
@@ -3239,8 +4187,6 @@ install_function(print_W_cells_wrapper,@|"print_W_cells"
 		,"(RealForm,DualRealForm->)");
 install_function(print_W_graph_wrapper,@|"print_W_graph"
 		,"(RealForm,DualRealForm->)");
-install_function(test_rep_wrapper,@|"test_rep","(KGBElt,vec,ratvec->)");
-
 
 
 @* Index.

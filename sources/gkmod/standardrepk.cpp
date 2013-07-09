@@ -8,7 +8,7 @@ StandardRepK and KhatContext.
 
   Copyright (C) 2006, 2007 Alfred Noel
   Copyright (C) 2008, 2009 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -295,9 +295,9 @@ SRK_context::height(const StandardRepK& sr) const
   level sum=0;
   for (rootdata::WRootIterator
 	 it=rd.beginPosCoroot(); it!=rd.endPosCoroot(); ++it)
-    sum +=arithmetic::abs(mu.scalarProduct(*it));
+    sum +=arithmetic::abs(mu.dot(*it));
 
-  return sum/2; // each |scalarProduct| above is even
+  return sum/2; // each |dot| above is even
 } // |SRK_context::height|
 
 
@@ -326,13 +326,13 @@ level SRK_context::height_bound(const Weight& lambda)
     new_negatives.reset();
     mu=get_projection(negatives).projection*lambda;
     for (size_t i=0; i<rd.semisimpleRank(); ++i)
-      if (not negatives[i] and mu.scalarProduct(rd.simpleCoroot(i))<0)
+      if (not negatives[i] and mu.dot(rd.simpleCoroot(i))<0)
 	new_negatives.set(i);
     negatives |= new_negatives;
   }
   while (new_negatives.any());
 
-  level sp=mu.scalarProduct(rd.dual_twoRho());
+  level sp=mu.dot(rd.dual_twoRho());
   level d=2*get_projection(negatives).denom; // double to match |sum/2| above
   return (sp+d-1)/d; // round upwards, since height is always integer
 } // |SRK_context::height_bound|
@@ -345,7 +345,7 @@ bool SRK_context::isStandard(const StandardRepK& sr, size_t& witness) const
   const Fiber& f=fiber(sr);
 
   for (size_t i=0; i<f.imaginaryRank(); ++i)
-    if (lambda.scalarProduct(rd.coroot(f.simpleImaginary(i)))<0)
+    if (lambda.dot(rd.coroot(f.simpleImaginary(i)))<0)
     {
       witness=i; return false;
     }
@@ -376,7 +376,7 @@ bool SRK_context::isZero(const StandardRepK& sr, size_t& witness) const
 
   for (size_t i=0; i<f.imaginaryRank(); ++i)
     if (not basedTitsGroup().grading(a,f.simpleImaginary(i)) // i.e., compact
-	and lambda.scalarProduct(rd.coroot(f.simpleImaginary(i)))==0)
+	and lambda.dot(rd.coroot(f.simpleImaginary(i)))==0)
     {
       witness=i; return true;
     }
@@ -392,7 +392,7 @@ bool SRK_context::isFinal(const StandardRepK& sr, size_t& witness) const
 
   // since coordinates are doubled, the scalar product below is always even
   for (size_t i=0; i<f.realRank(); ++i)
-    if (lambda.scalarProduct(rd.coroot(f.simpleReal(i)))%4 == 0)
+    if (lambda.dot(rd.coroot(f.simpleReal(i)))%4 == 0)
     {
       witness=i; return false;
     }
@@ -553,7 +553,6 @@ SRK_context::theta_stable_parabolic
 KGBEltList SRK_context::sub_KGB(const PSalgebra& q) const
 {
   BitMap flagged(kgb().size());
-  TitsElt strong=q.strong_involution();
 
   KGBElt root=UndefKGB;
   {
@@ -631,9 +630,9 @@ RawChar SRK_context::KGB_sum(const PSalgebra& q,
 	size_t k=sub_inv[kgb().cayley(*it,x)];
 	assert(k!=~0ul); // we ought to land in the subset
 	Weight nu=mu[k]; // $\rho-\lambda$ at split side
-	assert(nu.scalarProduct(rd.simpleCoroot(*it))%2 == 0); // finality
+	assert(nu.dot(rd.simpleCoroot(*it))%2 == 0); // finality
 	Weight alpha=rd.simpleRoot(*it);
-	nu -= (alpha *= nu.scalarProduct(rd.simpleCoroot(*it))/2); // project
+	nu -= (alpha *= nu.dot(rd.simpleCoroot(*it))/2); // project
 	mu.push_back(nu); // use projected weight at compact side of transform
 	break;
       }
@@ -776,9 +775,9 @@ Raw_q_Char SRK_context::q_KGB_sum(const PSalgebra& p,
 	size_t k=sub_inv[kgb().cayley(*it,x)];
 	assert(k!=~0ul); // we ought to land in the subset
 	Weight nu=mu[k]; // $\rho-\lambda$ at split side
-	assert(nu.scalarProduct(rd.simpleCoroot(*it))%2 == 0); // finality
+	assert(nu.dot(rd.simpleCoroot(*it))%2 == 0); // finality
 	Weight alpha=rd.simpleRoot(*it);
-	nu -= (alpha *= nu.scalarProduct(rd.simpleCoroot(*it))/2); // project
+	nu -= (alpha *= nu.dot(rd.simpleCoroot(*it))/2); // project
 	mu.push_back(nu); // use projected weight at compact side of transform
 	break;
       }
@@ -903,11 +902,11 @@ SRK_context::HS_id(const StandardRepK& sr, RootNbr alpha) const
       assert(i<rd.semisimpleRank());
     }
     // now $\<\alpha,\alpha_i^\vee> > 0$ where $\alpha$ is simple-imaginary
-    // and \alpha_i$ is complex for the involution |a.tw()|
 
     if (alpha==rd.simpleRootNbr(i)) break; // found it
 
-    // otherwise reflect all data by $s_i$, which decreases level of $\alpha$
+    // otherwise$\alpha_i$ is complex for the involution |a.tw()|; reflect
+    // all data by $s_i$, which decreases level of $\alpha$
     rd.simple_reflect_root(alpha,i);
     rd.simpleReflect(lambda,i);
     basedTitsGroup().basedTwistedConjugate(a,i);
@@ -1763,7 +1762,7 @@ template <typename C>
   matrix::Matrix_base<C> triangularize
    (const std::vector<
       std::pair<seq_no,
-                free_abelian::Free_Abelian<seq_no,C,graded_compare>
+                Free_Abelian<seq_no,C,graded_compare>
                > >& eq,
 	       std::vector<seq_no>& new_order)
 {
@@ -1795,7 +1794,7 @@ template <typename C>
     {
       incidence.reverseEdges(); // this facilitates reporting structure
       for (size_t j=0; j<n; ++j)
-	if (order(j)==i)
+	if (order.class_of(j)==i)
 	{
 	  std::cerr << eq[j].first;
 	  for (size_t k=0; k<incidence.edgeList(j).size(); ++k)
@@ -1804,14 +1803,15 @@ template <typename C>
 	}
       throw std::runtime_error ("triangularize: system has cycles");
     }
-    new_order[order(i)]=eq[i].first; // this puts equation |i| in its place
+    new_order[order.class_of(i)]=eq[i].first; // put equation |i| in its place
   }
 
   matrix::Matrix_base<C> result(n,n,C(0));
   for (size_t i=0; i<n; ++i)
     for (graph::EdgeList::const_iterator p=incidence.edgeList(i).begin();
 	 p!=incidence.edgeList(i).end(); ++p) // there is an edge |i| to |*p|
-      result(order(i),order(*p))=M(i,*p);     // so |order(i)>=order(*p)|
+                                // so |order.class_of(i)>=order.class_of(*p)|
+      result(order.class_of(i),order.class_of(*p))=M(i,*p);
 
   return result;
 } // |triangularize|

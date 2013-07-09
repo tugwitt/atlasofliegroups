@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -212,7 +212,8 @@ void OrientedGraph::cells(partition::Partition& pi, OrientedGraph* gr) const
   {
     unsigned long last=pi.classCount()-1;
     std::vector<unsigned long> f(pi.size());
-    for (size_t i=0; i<f.size(); ++i) f[i]=last-pi(i); // opposite renumbering
+    for (size_t i=0; i<f.size(); ++i)
+      f[i]=last-pi.class_of(i); // opposite renumbering
 
     // replace |pi| by its reversely numbered equivalent
     partition::Partition(f,tags::UnnormalizedTag()).swap(pi);
@@ -294,7 +295,7 @@ void OrientedGraph::addLinks
   bitmap::BitMap seen(c+1);
   for (size_t i=0; i<out.size(); ++i)
     for (size_t j = 0; j < (*out[i]).size(); ++j)
-      seen.insert(pi((*out[i])[j]));
+      seen.insert(pi.class_of((*out[i])[j]));
   seen.remove(c); // exclude any edge from class |c| to itself
   EdgeList& e = edgeList(c); // the new edge list to define
   e.reserve(seen.size());

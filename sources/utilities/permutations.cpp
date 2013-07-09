@@ -6,7 +6,7 @@
 */
 /*
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -120,35 +120,6 @@ void Permutation::left_mult(std::vector<U>& v) const
     v[i]=pi[v[i]];
 }
 
-/*!
-  Applies our permutation |pi| to the vector |v|. In other words, we send each
-  entry v[i] to the new position v[pi[i]]; this means that afterwards for all
-  |i|: |new_v[pi[i]]==old_v[i]|, or equivalently $new_v[i]=old_v[pi^{-1}[i]]$.
-  This notion of permuting an arbitrary sequence is a left action of $S_n$.
-
-  This is pulling back (right multiplication) through the inverse permutation.
-
-  We are able to perform this permutation essentially in-place, using an
-  auxiliary bitmap.
-*/
-template<typename T> void Permutation::permute(std::vector<T>& v) const
-{
-  assert(v.size()>=size());
-  const Permutation& pi=*this;
-  bitmap::BitMap seen(v.size()); // initialized empty
-
-  for (unsigned long i = 0; i < v.size(); ++i)
-    if (not seen.isMember(i))
-    {
-      seen.insert(i);
-      for (unsigned long j=pi[i]; j!=i; j=pi[j]) // cycle from |pi[i]| to |i|
-      {
-	std::swap(v[i],v[j]); // transpose |v[i]] with other members in order
-	seen.insert(j);
-      }
-    }
-}
-
 /*! Permutes rows and columns of the matrix according to the permutation,
   resulting in the matrix of the same operator, expressed in the permuted
   basis e_{a^{-1}[0]}, ... , e_{a^{-1}[n-1]}. This amounts to conjugating by
@@ -205,11 +176,11 @@ void Permutation::inv_conjugate(matrix::Matrix_base<T>& M) const
 // Standardization is a method of associating to a sequence of numbers |a| a
 // permutation |pi|, such that |a[i]<a[j]| implies |pi[i]<pi[j], and
 // |a[i]<a[j]| implies that |pi[i]<pi[j] is equivalent to |i<j|. Equivalently,
-// setteing |a=standardize(a).pull_back(a)| amounts to stable sorting of |a|.
-
+// setting |a=standardization(a).permute(a)| amounts to stable sorting of |a|.
+// Complexity is $O(n+bound)$ with $n=#a$; good (only) if $bound=O(n log(n))$.
 template <typename U>// unsigned type
-Permutation standardize(const std::vector<U>& a, size_t bound,
-			std::vector<unsigned int>* stops)
+Permutation standardization(const std::vector<U>& a, size_t bound,
+			    std::vector<unsigned int>* stops)
 {
   std::vector<unsigned int> count(bound,0);
   for (size_t i=a.size(); i-->0; ) // downwards might be faster
@@ -261,8 +232,8 @@ template void
 Permutation::inv_conjugate(matrix::Matrix_base<int>& M) const; // weyl
 
 template Permutation
-standardize(const std::vector<unsigned int>& a, size_t bound,
-	    std::vector<unsigned int>* stops);
+standardization(const std::vector<unsigned int>& a, size_t bound,
+		std::vector<unsigned int>* stops);
 
 } // |namespace permutations|
 

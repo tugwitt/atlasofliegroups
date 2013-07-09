@@ -2,7 +2,7 @@
   This is realredgp_io.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -192,14 +192,14 @@ std::ostream& printStrongReal(std::ostream& strm,
       for (Grading::iterator it=base_grading.begin(); it(); ++it)
 	z += G_C.rootDatum().fundamental_coweight(*it);
 
-      Weight& zn = z.numerator();
+      Ratvec_Numer_t& zn = z.numerator();
       for (size_t i=0; i<z.size(); ++i)
         zn[i]=arithmetic::remainder(zn[i],z.denominator());
       strm << "class #" << f_csc
 	   << ", possible square: exp(2i\\pi(" << z << "))" << std::endl;
     }
 
-    const Partition& pi = cc.strongReal(csc);
+    const Partition& pi = cc.fiber_partition(csc);
 
     unsigned long c = 0;
 

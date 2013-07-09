@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -20,9 +20,11 @@ namespace atlas {
 
 namespace arithmetic {
 
+  typedef long long int Numer_t;
+  typedef unsigned long long int Denom_t;
   class Rational;
   typedef std::vector<Rational> RationalList;
-
+  class Split_integer;
 
 } // |namespace arithmetic|
 

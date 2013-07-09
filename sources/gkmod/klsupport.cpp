@@ -10,7 +10,7 @@
   This is klsupport.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -42,7 +42,7 @@ namespace {
 
 namespace klsupport {
 
-KLSupport::KLSupport(Block_base& b)
+KLSupport::KLSupport(const Block_base& b)
   : d_state()
   , d_block(b)
   , d_descent()
@@ -82,7 +82,7 @@ void KLSupport::swap(KLSupport& other)
   belong to the intersection of the downsets for the various descents in d.
 */
 
-void KLSupport::extremalize(BitMap& b, const RankFlags& d)
+void KLSupport::filter_extremal(BitMap& b, const RankFlags& d)
   const
 {
   for (weyl::Generator s=0; s<rank(); ++s)
@@ -103,8 +103,7 @@ void KLSupport::extremalize(BitMap& b, const RankFlags& d)
   descent or imaginary type II, this amounts to requesting that z belong to
   the intersection of the primsets for the various descents in d.
 */
-void KLSupport::primitivize(BitMap& b, const RankFlags& d)
-  const
+void KLSupport::filter_primitive(BitMap& b, const RankFlags& d) const
 {
   for (weyl::Generator s=0; s<rank(); ++s)
     if (d.test(s))
@@ -112,10 +111,10 @@ void KLSupport::primitivize(BitMap& b, const RankFlags& d)
 }
 
 
-/*!\brief
-  Either replaces the block element |x| if possible with a primitive element
-  for |d| above it, while returning that value, or returns |UndefBlock| if
-  a real nonparity case is hit (leaving |x| at the block element in question).
+/*
+  Finds for |x| a primitive element for |d| above it, returning that value, or
+  returns |UndefBlock| if a real nonparity case is hit, or (in partial blocks)
+  ascent through an undefined complex ascent or Cayley transform is attempted
 
   Explanation: a primitive element for |d| is one for which all elements in
   |d| are either descents or type II imaginary ascents. So if |x| is not
@@ -124,22 +123,21 @@ void KLSupport::primitivize(BitMap& b, const RankFlags& d)
   ascended element and continue; in the last case, we return |UndefBlock| (for
   K-L computations, this case implies that $P_{x,y}=0$; the value of
   |UndefBlock| is conveniently larger than any valid BlockElt |y|, so this
-  case will be handled effortlessly together with triangularity).
+  case will be handled effortlessly together with triangularity). It is also
+  permissible to pass |x==UndefBlock|, which will be returned immediately.
 */
 BlockElt
   KLSupport::primitivize(BlockElt x, const RankFlags& d) const
 {
   RankFlags a; // good ascents for x that are descents for y
 
-  while ((a = goodAscentSet(x)&d).any())
+  while (x!=blocks::UndefBlock and (a = goodAscentSet(x)&d).any())
   {
     size_t s = a.firstBit();
     DescentStatus::Value v = descentValue(s,x);
-    if (v == DescentStatus::RealNonparity)
-      return blocks::UndefBlock; // cop out
-    x = v == DescentStatus::ComplexAscent // complex or imag type I ?
-	? d_block.cross(s,x)
-	: d_block.cayley(s,x).first;
+    x = v == DescentStatus::RealNonparity ? blocks::UndefBlock
+      : v == DescentStatus::ComplexAscent ? d_block.cross(s,x)
+      : d_block.cayley(s,x).first; // imaginary type I
   }
   return x;
 }
@@ -176,7 +174,7 @@ void KLSupport::fill()
   |descents| and |goodAscent| are vectors indexed by a block element |z| and
   giving a bitset over all simple reflections. This difference is motivated by
   their use: |downset| and |primset| are used to filter bitmaps over the
-  entire block according to som set of simple generators, which is easier if
+  entire block according to some set of simple generators, which is easier if
   the data is grouped by generator. In fact the data computed is stored twice:
   one always has |downset[s].isMember(z) == descents[z].test(s)| and
   |primset[s].isMember(z) != good_ascent[z].test(s)|

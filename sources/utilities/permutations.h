@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -81,8 +81,8 @@ namespace permutations {
   void compose(Permutation&, const Permutation&, unsigned long n = 0);
 
   template<typename U>
-    Permutation standardize(const std::vector<U>& a, size_t bound,
-			    std::vector<unsigned int>* stops = NULL);
+    Permutation standardization(const std::vector<U>& a, size_t bound,
+				std::vector<unsigned int>* stops = NULL);
 
 }
 

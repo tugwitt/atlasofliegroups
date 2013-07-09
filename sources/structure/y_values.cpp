@@ -2,7 +2,7 @@
   This is y_values.cpp.
 
   Copyright (C) 2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -29,8 +29,8 @@ TorusElement::TorusElement(const RatWeight& r, bool two)
   : repr(r) // but possibly multiplied by 2 below
 { if (two)
     repr*=2;
-  unsigned int d=2u*repr.denominator(); // we reduce modulo $2\Z^rank$
-  Weight& num=repr.numerator();
+  arithmetic::Denom_t d=2u*repr.denominator(); // we reduce modulo $2\Z^rank$
+  Ratvec_Numer_t& num=repr.numerator();
   for (size_t i=0; i<num.size(); ++i)
     num[i] = arithmetic::remainder(num[i],d);
 }
@@ -44,50 +44,52 @@ RatWeight TorusElement::log_pi(bool normalize) const
 
 RatWeight TorusElement::log_2pi() const
 {
-  Weight numer = repr.numerator(); // copy
-  unsigned int d = 2u*repr.denominator(); // this will make result mod Z, not 2Z
+  Ratvec_Numer_t numer = repr.numerator(); // copy
+  arithmetic::Denom_t d = 2u*repr.denominator(); // make result mod Z, not 2Z
   return RatWeight(numer,d).normalize();
 }
 
-Rational TorusElement::evaluate_at
-  (const Coweight& alpha) const
+// evaluation giving rational number modulo 2
+Rational TorusElement::evaluate_at (const Coweight& alpha) const
 {
-  unsigned int d = repr.denominator();
-  int n = arithmetic::remainder(repr.numerator().dot(alpha),d+d);
+  arithmetic::Denom_t d = repr.denominator();
+  arithmetic::Numer_t n =
+    arithmetic::remainder(alpha.dot(repr.numerator()),d+d);
   return Rational(n,d);
 }
 
 TorusElement TorusElement::operator +(const TorusElement& t) const
 {
   TorusElement result(repr + t.repr,tags::UnnormalizedTag()); // raw ctor
-  int d=2*result.repr.denominator(); // we shall reduce modulo $2\Z^rank$
-  Weight& num=result.repr.numerator();
+  arithmetic::Numer_t d=2*result.repr.denominator(); // reduce modulo $2\Z^rank$
+  Ratvec_Numer_t& num=result.repr.numerator();
   for (size_t i=0; i<num.size(); ++i)
     if (num[i] >= d) // correct if |result.repr| in interval $[2,4)$
-      num[i] -=d;
+      num[i] -= d;
   return result;
 }
 
 TorusElement TorusElement::operator -(const TorusElement& t) const
 {
   TorusElement result(repr - t.repr,0); // raw constructor
-  int d=2*result.repr.denominator(); // we shall reduce modulo $2\Z^rank$
-  Weight& num=result.repr.numerator();
+  arithmetic::Numer_t d=2*result.repr.denominator(); // reduce modulo $2\Z^rank$
+  Ratvec_Numer_t& num=result.repr.numerator();
   for (size_t i=0; i<num.size(); ++i)
     if (num[i]<0) // correct if |result.repr| in interval $(-2,0)$
-      num[i] +=d;
+      num[i] += d;
   return result;
 }
 
 TorusElement& TorusElement::operator+=(TorusPart v)
 {
+  arithmetic::Numer_t d = repr.denominator();
   for (size_t i=0; i<v.size(); ++i)
     if (v[i])
     {
-      if (repr.numerator()[i]<repr.denominator())
-	repr.numerator()[i]+=repr.denominator(); // add 1/2 to coordinate
+      if (repr.numerator()[i]<d)
+	repr.numerator()[i]+=d; // add 1/2 to coordinate
       else
-	repr.numerator()[i]-=repr.denominator(); // subtract 1/2
+	repr.numerator()[i]-=d; // subtract 1/2
     }
   return *this;
 }
@@ -95,6 +97,9 @@ TorusElement& TorusElement::operator+=(TorusPart v)
 
 void TorusElement::simple_reflect(const PreRootDatum& prd, weyl::Generator s)
 { prd.simpleReflect(repr.numerator(),s); } // numerator is weight for |prd|
+
+void TorusElement::reflect(const RootDatum& rd, RootNbr alpha)
+{ rd.reflect(repr.numerator(),alpha); } // numerator is weight for |rd|
 
 
 TorusElement TorusElement::simple_imaginary_cross
@@ -111,7 +116,7 @@ TorusElement TorusElement::simple_imaginary_cross
 size_t y_entry::hashCode(size_t modulus) const
 {
   unsigned long d= fingerprint.denominator()+1;
-  const int_Vector& num=fingerprint.numerator();
+  const Ratvec_Numer_t& num=fingerprint.numerator();
   size_t h=nr; // start with involution number
   for (size_t i=0; i<num.size(); ++i)
     h=h*d+num[i];

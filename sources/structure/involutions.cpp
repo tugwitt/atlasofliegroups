@@ -2,7 +2,7 @@
   This is involutions.cpp.
 
   Copyright (C) 2011 Marc van Leeuwen
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -12,7 +12,7 @@
 #include "involutions.h"
 
 #include "arithmetic.h"
-
+#include "matreduc.h"
 #include "rootdata.h"
 #include "weyl.h"
 #include "y_values.h"
@@ -183,29 +183,49 @@ InvolutionTable::InvolutionTable
 }
 
 // a method used to create the first element of a Cartan orbit of involutions
-InvolutionNbr InvolutionTable::add_involution(const TwistedInvolution& tw)
+InvolutionNbr InvolutionTable::add_involution
+  (const TwistedInvolution& canonical)
 {
-  InvolutionNbr result=hash.match(weyl::TI_Entry(tw));
-  if (result<data.size()) return result; // skip if |tw| was already known
+  InvolutionNbr result=hash.match(weyl::TI_Entry(canonical));
+  if (result<data.size()) return result; // skip if |canonical| already known
 
   // compute the involution matrix |theta| using |Cayley_roots|
   const WeylGroup& W= tW.weylGroup();
   TwistedInvolution cross;
-  RootNbrList Cayleys = Cayley_roots(tw,rd,tW,cross);
+  RootNbrList Cayleys = Cayley_roots(canonical,rd,tW,cross);
 
   WeightInvolution theta = delta;
   W.act(rd,cross,theta);
   for (RootNbrList::const_iterator it=Cayleys.begin(); it!=Cayleys.end(); ++it)
     rd.reflect(*it,theta);
 
-  int_Matrix A=theta; // will contain |theta-id|, row-saturated
+  int_Matrix A=theta; // will contain |id-theta|, later row-saturated
+  A.negate();
   for (size_t i=0; i<A.numRows(); ++i)
-    --A(i,i);
+    ++A(i,i);
+
+  // |R| will map $\lambda-\rho$ to reduced torus part coordinates
+  // |B| will then map these coordinates (mod 2) through to $A*(\lambda-\rho)$
+  std::vector<int> diagonal;
+  int_Matrix B = matreduc::adapted_basis(A,diagonal); // matrix for lifting
+  int_Matrix R = B.inverse(); // matrix that maps to adapted basis coordinates
+  R.block(0,0,diagonal.size(),R.numColumns()).swap(R); R*=A;
+  for (unsigned i=0; i<R.numRows(); ++i)
+    for (unsigned j=0; j<R.numColumns(); ++j)
+    {
+      assert (R(i,j)%diagonal[i]==0); // since $R=D(diagonal)*C^{-1}$
+      R(i,j)/=diagonal[i]; // don't need |arithmetic::divide|, division exact
+    }
+
+  B.block(0,0,B.numRows(),diagonal.size()).swap(B);
+  for (unsigned j=0; j<B.numColumns(); ++j)
+    B.columnMultiply(j,diagonal[j]);
+
   A = lattice::row_saturate(A);
 
-  unsigned int W_length=W.length(tw);
+  unsigned int W_length=W.length(canonical);
   unsigned int length = (W_length+Cayleys.size())/2;
-  data.push_back(record(theta,InvolutionData(rd,theta),A,
+  data.push_back(record(theta,InvolutionData(rd,theta),A,R,diagonal,B,
 			length,W_length,tits::fiber_denom(theta)));
   assert(data.size()==hash.size());
 
@@ -226,6 +246,8 @@ InvolutionNbr InvolutionTable::add_cross(weyl::Generator s, InvolutionNbr n)
   rd.simple_reflect(s,me.theta);
   rd.simple_reflect(me.theta,s); // not |twisted(s)|: |delta| is incorporated
   rd.simple_reflect(me.projector,s); // reflection by |s| of kernel
+  rd.simple_reflect(me.M_real,s); // apply $s$ before |M_real|
+  rd.simple_reflect(s,me.lift_mat); // and apply it after |lift_mat|
   me.id.cross_act(rd.simple_root_permutation(s));
   me.length   += d/2;
   me.W_length += d;
@@ -254,7 +276,7 @@ bool InvolutionTable::equivalent
 {
   assert(i<hash.size());
   RatWeight wt=(t2-t1).log_2pi();
-  int_Vector p = data[i].projector * wt.numerator();
+  Ratvec_Numer_t p = data[i].projector * wt.numerator();
 
   for (size_t j=0; j<p.size(); ++j)
     if (p[j]%wt.denominator()!=0)
@@ -268,7 +290,7 @@ RatWeight InvolutionTable::fingerprint
 {
   assert(i<hash.size());
   RatWeight wt = t.log_2pi();
-  int_Vector p = data[i].projector * wt.numerator();
+  Ratvec_Numer_t p = data[i].projector * wt.numerator();
 
   // reduce modulo integers and return
   for (size_t j=0; j<p.size(); ++j)
@@ -281,7 +303,7 @@ y_entry InvolutionTable::pack (const TorusElement& t, InvolutionNbr i) const
   return y_entry(fingerprint(t,i),i,t);
 }
 
-// this method makes involution table useble in X command, even if inefficient
+// this method makes involution table usable in X command, even if inefficient
 KGB_elt_entry InvolutionTable::x_pack(const GlobalTitsElement& x) const
 {
   const TwistedInvolution& tw= x.tw();
@@ -293,7 +315,7 @@ KGB_elt_entry InvolutionTable::x_pack(const GlobalTitsElement& x) const
   for (size_t i=0; i<A.numRows(); ++i)
     A(i,i) += 1;
   int_Matrix projector = lattice::row_saturate(A);
-  int_Vector p = projector * wt.numerator();
+  Ratvec_Numer_t p = projector * wt.numerator();
 
   // reduce modulo integers and return
   for (size_t j=0; j<p.size(); ++j)
@@ -317,7 +339,7 @@ InvolutionTable::x_equiv(const GlobalTitsElement& x0,
   for (size_t i=0; i<A.numRows(); ++i)
     A(i,i) += 1;
   int_Matrix projector = lattice::row_saturate(A);
-  int_Vector p = projector * wt.numerator();
+  Ratvec_Numer_t p = projector * wt.numerator();
 
   for (size_t i=0; i<p.size(); ++i)
     if (p[i]%wt.denominator()!=0)
@@ -326,15 +348,44 @@ InvolutionTable::x_equiv(const GlobalTitsElement& x0,
   return true;
 }
 
-TorusPart InvolutionTable::check_rho_imaginary(InvolutionNbr i) const
+TorusPart InvolutionTable::check_rho_imaginary(InvolutionNbr inv) const
 {
   TorusPart result(rd.rank());
-  RootNbrSet pos_im=imaginary_roots(i) & rd.posRootSet();
+  RootNbrSet pos_im=imaginary_roots(inv) & rd.posRootSet();
   for (RootNbrSet::iterator it=pos_im.begin(); it(); ++it)
     result += TorusPart (rd.coroot(*it));
   return result;
 }
 
+void InvolutionTable::real_unique(InvolutionNbr inv, RatWeight& y) const
+{
+  const record& rec=data[inv];
+  Ratvec_Numer_t v = rec.M_real * y.numerator();
+  assert(v.size()==rec.diagonal.size());
+  for (unsigned i=0; i<v.size(); ++i)
+    v[i]= arithmetic::remainder(v[i],2*rec.diagonal[i]*y.denominator());
+
+  y.numerator()= rec.lift_mat * v; (y/=2).normalize();
+}
+
+TorusPart InvolutionTable::pack(InvolutionNbr inv, const Weight& lambda_rho)
+  const
+{
+  const record& rec=data[inv];
+  int_Vector v = rec.M_real * lambda_rho;
+  assert(v.size()==rec.diagonal.size());
+  return TorusPart(v); // reduce coordinates modulo 2
+}
+
+Weight InvolutionTable::unpack(InvolutionNbr inv, TorusPart y_part) const
+{
+  const record& rec=data[inv];
+  Weight result(rec.lift_mat.numRows(),0);
+  for (unsigned i=0; i<y_part.size(); ++i)
+    if (y_part[i])
+      result += rec.lift_mat.column(i);
+  return result;
+}
 
 // ------------------------------ Cartan_orbit --------------------------------
 

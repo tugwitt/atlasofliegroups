@@ -1,5 +1,5 @@
 % Copyright (C) 2006 Marc van Leeuwen
-% This file is part of the Atlas of Reductive Lie Groups software (the Atlas)
+% This file is part of the Atlas of Lie Groups and Representations (the Atlas)
 
 % This program is made available under the terms stated in the GNU
 % General Public License (GPL), see http://www.gnu.org/licences/licence.html
@@ -252,15 +252,18 @@ pushing the comment character to warn the user that no action has been
 performed. In case |prevent_termination| is set, that character is also pushed
 into the prompt for the duration of skipping spaces.
 
-In case end of input occurs one obtains |shift()=='\0'|. If this happens in
-the main loop then we break from it like for any non-space character, and
-although the following |input.unshift()| does nothing, the value |'\0'| should
-reappear at the next call of |shift|. If end of input occurs during a comment,
-then the comment is terminated due to the explicit test, and again the
-persistence of |shift()=='\0'| will guarantee that the end of input eventually
-turns up in non-skipping context.
+In case end of input occurs one obtains |shift()=='\0'|, and for the end of an
+included file one obtains |shift()=='\f'|, a form-feed. If the former happens
+in the main loop of |skip_space| then we break from it like for any non-space
+character, and although the following |input.unshift()| does nothing, the
+value |'\0'| should reappear at the next call of |shift|. If end of input or a
+form-feed occurs during a comment, then the comment is terminated (with an
+error message) due to the explicit test, and the character that provoked this
+will be reconsidered so the end of file will not be masked by the comment it
+occurred inside.
 
 @h<cctype>
+@h<iostream>
 
 @< Definitions of class members @>=
 void Lexical_analyser::skip_space(void)
@@ -268,8 +271,10 @@ void Lexical_analyser::skip_space(void)
   do
   { char c=input.shift();
     if (isspace(c))
-    { if (c=='\n' && prevent_termination=='\0' && nesting==0) break;
-         // newline is not skipped if some command could end here
+    { if (c=='\n' and prevent_termination=='\0' and nesting==0
+          or c=='\f')
+        break;
+// newline not skipped if some command could end here, form feed never skipped
       continue; // all other space is skipped
     }
     if (c==comment_start)
@@ -278,14 +283,19 @@ void Lexical_analyser::skip_space(void)
         input.unshift(); // reconsider newline character
       }
       else // skip comment, allowing for nested comment groups
-      { int level=1;
+      { int level=1; int line; int column;
+        input.locate(input.point(),line,column); // maybe needed for reporting
         input.push_prompt(comment_start);
         do
         {
           do c=input.shift();
-          while (c!= comment_start and c!=comment_end and c!='\0');
-          if (c=='\0')
-            break; // force out of comment loop
+          while (c!= comment_start and c!=comment_end and c!='\0' and c!='\f');
+          if (c=='\0' or c=='\f')
+          { std::cerr << "Comment that started on line " << line
+                      << ", column " << column @| << " is never closed.\n";
+          @/ input.unshift(); break;
+          // force out of comment loop, reconsider character
+          }
           if (c==comment_start)
           {@; ++level;
             input.push_prompt(comment_start);
@@ -329,12 +339,14 @@ char* Lexical_analyser::scan_quoted_string()
     }
     else if ((c=input.shift())!='"')
     {@; input.unshift(); end=input.point()-1; break; }
-    else ++nr_quotes; // for doubled quotes, continue
+    else
+      ++nr_quotes; // for doubled quotes, continue
   } while (true);
   size_t len=end-start-nr_quotes;
   char* s=new char[len+1];
   while (start<end) // copy characters, undoubling doubled quotes
-    if ((*s++=*start++)=='"') ++start;
+    if ((*s++=*start++)=='"')
+      ++start;
   *s='\0'; return s-len;
 }
 
@@ -405,15 +417,21 @@ token scanned.
 
 @< Definitions of class members @>=
 int Lexical_analyser::get_token(YYSTYPE *valp, YYLTYPE* locp)
-{ if (state==ended) {@; state=initial; return 0; } // send end of input
+{ if (state==ended)
+    {@; state=initial; return 0; } // send end of input
   skip_space(); prevent_termination='\0';
   input.locate(input.point(),locp->first_line,locp->first_column);
   int code; char c=input.shift();
-  if (isalpha(c)) @< Scan an identifier or a keyword @>
-  else if (isdigit(c)) @< Scan a number @>
-  else @< Scan a token starting with a non alpha-numeric character @>
+  if (isalpha(c))
+    @< Scan an identifier or a keyword @>
+  else if (isdigit(c))
+    @< Scan a number @>
+  else
+    @< Scan a token starting with a non alpha-numeric character @>
   input.locate(input.point(),locp->last_line,locp->last_column);
-@/if (state==initial) state=normal; return code;
+@/if (state==initial)
+   state=normal;
+  return code;
 }
 
 @ Everything that looks like an identifier is either that or a keyword, or a
@@ -425,10 +443,13 @@ although this is probably desirable. However type names
 
 @< Scan an identifier or a keyword @>=
 { const char* p=input.point@[()@]-1; // start of token
-  do c=input.shift(); while(isalpha(c) || isdigit(c) || c=='_');
+  do
+    c=input.shift();
+  while(isalpha(c) || isdigit(c) || c=='_');
   input.unshift();
   Hash_table::id_type id_code=id_table.match(p,input.point()-p);
-  if (id_code>=type_limit) {@; valp->id_code=id_code; code=IDENT; }
+  if (id_code>=type_limit)
+  {@; valp->id_code=id_code; code=IDENT; }
   else if (id_code>=keyword_limit)
   {@; valp->type_code=id_code-keyword_limit; code=TYPE; }
   else
@@ -456,7 +477,9 @@ values.
 
 @< Scan a number @>=
 { const char* p=input.point@[()@]-1; // start of token
-  do c=input.shift(); while(isdigit(c));
+  do
+    c=input.shift();
+  while(isdigit(c));
   input.unshift();
   const char* end=input.point();
   unsigned long val=*p++-'0'; @+  while (p<end) val=10*val+(*p++-'0');
@@ -487,7 +510,8 @@ included before) respectively appending output redirection.
          { code= c=='<'
            ? input.shift()=='<' ? FORCEFROMFILE:  (input.unshift(),FROMFILE)
            : input.shift()=='>' ? ADDTOFILE : (input.unshift(),TOFILE) ;
-	   @< Read in |file_name| @> @+ break;
+	   @< Read in |file_name| @>
+           @+ break;
          }
          prevent_termination=c;
          code = OPERATOR; valp->oper.priority=2;
@@ -587,7 +611,8 @@ if ((skip_space(),c=input.shift())=='"')
 @/{@; char* s=scan_quoted_string(); file_name=s; delete[] s; }
 else
 @/{@; file_name="";
-    while (!isspace(c)){@; file_name+=c; c=input.shift(); }
+    while (!isspace(c))
+    {@; file_name+=c; c=input.shift(); }
     input.unshift();
 }
 

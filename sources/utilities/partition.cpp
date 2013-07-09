@@ -10,7 +10,7 @@ acting on elements of order 2 in a torus.
   This is partition.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -159,16 +159,18 @@ PartitionIterator::PartitionIterator(const Partition& pi)
   for (unsigned long j = 0; j < d_data.size(); ++j)
     d_data[j] = j;
 
-  std::stable_sort(d_data.begin(),d_data.end(),comparison::compare(pi));
+  std::stable_sort(d_data.begin(),d_data.end(),
+		   comparison::compare(pi.comparer()));
 
   {
     SubIterator data_end = d_data.end();
-    unsigned long thisClass = pi(d_data.front());
+    unsigned long thisClass = pi.class_of(d_data.front());
 
     for (SubIterator i = d_data.begin(); i != data_end; ++i)
-      if (pi(*i) != thisClass) { // start a new class
+      if (pi.class_of(*i) != thisClass) // then start a new class
+      {
 	d_stop.push_back(i);
-	thisClass = pi(*i);
+	thisClass = pi.class_of(*i);
       }
   }
 

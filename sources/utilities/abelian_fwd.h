@@ -4,7 +4,7 @@
 */
 /*
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -24,7 +24,7 @@ namespace atlas {
 
 namespace abelian {
 
-typedef unsigned long GrpNbr;  //!< element of Abelian group, compact repr.
+typedef unsigned long long GrpNbr;  //!< element of Abelian group, compact repr.
 typedef std::vector<GrpNbr> GrpNbrList;
 typedef std::vector<unsigned long> GrpArr; //!< group element, array repr.
 typedef std::vector<GrpArr> GrpArrList;

@@ -2,7 +2,7 @@
   This is block_io.h
 
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Reductive Lie Groups
+  part of the Atlas of Lie Groups and Representations
 
   For license information see the LICENSE file
 */
@@ -30,6 +30,7 @@ namespace block_io {
 
   std::ostream& printDescent(std::ostream&, const DescentStatus& ds,
 			     size_t rank, RankFlags mask = RankFlags(~0ul));
+  std::ostream& print_KL(std::ostream&f, non_integral_block& block, BlockElt z);
 
 }
 
