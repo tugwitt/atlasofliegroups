@@ -16,12 +16,12 @@
 
 namespace atlas {
 
-namespace reprmode {
+namespace commands {
 
 /******** type declarations ************************************************/
 
   struct ReprmodeTag {};
-  enum block_type { noblock, iblock, nblock, partial_block };
+  enum block_type { noblock, nblock, partial_block };
 
 /******** variable declarations ********************************************/
 
@@ -29,17 +29,14 @@ namespace reprmode {
   extern block_type state;
   extern BlockElt entry_z;
 
-/******** function declarations ********************************************/
+/******** function and variable declarations ********************************/
 
-  commands::CommandMode& reprMode();
+  commands::CommandNode reprNode();
+  extern CommandTree& repr_mode; // defined in commands.cpp
   const SubSystemWithGroup& currentSubSystem();
-  param_block& currentBlock();
+  param_block& current_param_block();
   const StandardRepr& currentStandardRepr();
-  kl::KLContext& currentKL();
-  const wgraph::WGraph& currentWGraph();
-
-  void addBlockHelp(commands::CommandMode&, commands::TagDict&);
-
+  void ensure_full_block();
 
 } // namespace reprmode
 

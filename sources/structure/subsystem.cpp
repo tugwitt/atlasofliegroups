@@ -121,9 +121,9 @@ weyl::Twist SubSystem::twist(const WeightInvolution& theta,
 
   // |Delta| now describes the |sub|-side fundamental involution, a twist
 
-  weyl::Twist result; // the subsystem twist that |Delta| has be  reduced to
+  weyl::Twist result; // the subsystem twist that |Delta| has been reduced to
   for (weyl::Generator i=0; i<rank(); ++i)
-    result[i] = simpleRootIndex(Delta[i]);
+    result[i] = RootSystem::simpleRootIndex(Delta[i]);
 
   // Let |theta_0| be the involution such that |Delta| describes $-theta_0^t$
   // then (for integrality systems) |theta_0| is parent quasi-split involution
@@ -142,7 +142,7 @@ weyl::Twist SubSystem::twist(const WeightInvolution& theta,
 }
 
 // Here we seek twist and |ww| on parent side (dual with respect to |sub|)
-// used in |TitsGroup| constructor for subdatum, called from |SubDatum|
+// used in |blocks::param_block::compute_duals| (just for the induced |Twist|)
 weyl::Twist SubSystem::parent_twist(const WeightInvolution& theta,
 				    WeylWord& ww) const
 {
@@ -158,11 +158,11 @@ weyl::Twist SubSystem::parent_twist(const WeightInvolution& theta,
 
   // set |ww| to parent-side word, omitting inversion and twist done above
   ww = rootdata::wrt_distinguished(*this,Delta);
-  // the above call has makes |Delta| sub-distinguished from parent side
+  // the above call has made |Delta| sub-distinguished from parent side
 
   weyl::Twist result;
   for (weyl::Generator i=0; i<rank(); ++i)
-    result[i] = simpleRootIndex(Delta[i]);
+    result[i] = RootSystem::simpleRootIndex(Delta[i]);
 
   return result;
 }
@@ -201,7 +201,7 @@ Grading SubSystem::induced(Grading base_grading) const
 SubSystemWithGroup::SubSystemWithGroup(const RootDatum& parent,
 				       const RootNbrList& sub_sys)
   : SubSystem(parent,sub_sys) // build
-  , sub_W(RootSystem::cartanMatrix()) // use Cartan matrix above
+  , sub_W(RootSystem::cartanMatrix()) // use sub-side Cartan matrix built above
 {}
 
 SubSystemWithGroup SubSystemWithGroup::integral // pseudo contructor
@@ -209,13 +209,13 @@ SubSystemWithGroup SubSystemWithGroup::integral // pseudo contructor
 {
   arithmetic::Numer_t n=gamma.denominator(); // signed!
   const Ratvec_Numer_t& v=gamma.numerator();
-  RootNbrSet int_roots(parent.numRoots());
+  RootNbrSet int_coroots(parent.numRoots());
   for (size_t i=0; i<parent.numPosRoots(); ++i)
     if (parent.posCoroot(i).dot(v)%n == 0)
-      int_roots.insert(parent.posRootNbr(i));
+      int_coroots.insert(parent.posRootNbr(i));
 
   // it suffices that simpleBasis computed below live until end of constructor
-  return SubSystemWithGroup(parent,parent.simpleBasis(int_roots));
+  return SubSystemWithGroup(parent,parent.simpleBasis(int_coroots));
 }
 
 } // |namespace subdatum|

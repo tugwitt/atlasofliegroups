@@ -16,28 +16,25 @@
 
 namespace atlas {
 
-namespace blockmode {
+namespace commands {
 
 /******** type declarations *************************************************/
 
   struct BlockmodeTag {};
 
-/******** function declarations ********************************************/
+/******** function and variable declarations ********************************/
 
-  commands::CommandMode& blockMode();
+  CommandNode blockNode(); // create a node with new commands
+  extern CommandTree& block_mode; // defined in commands.cpp
   ComplexReductiveGroup& currentDualComplexGroup();
   RealReductiveGroup& currentDualRealGroup();
   RealFormNbr currentDualRealForm();
   Block& currentBlock();
   kl::KLContext& currentKL();
-  wgraph::WGraph& currentWGraph();
+  const wgraph::WGraph& currentWGraph();
 
-  void addBlockHelp(commands::CommandMode&, commands::TagDict&);
+} // |namespace commands|
 
-
-} // namespace blockmode
-
-
-} // namespace atlas
+} // |namespace atlas|
 
 #endif

@@ -10,7 +10,7 @@ StandardRepK and KhatContext.
   Copyright (C) 2008, 2009 Marc van Leeuwen
   part of the Atlas of Lie Groups and Representations version 0.2.4
 
-  See file main.cpp for full copyright notice
+  For license information see the LICENSE file
 */
 
 #ifndef STANDARDREPK_H  /* guard against multiple inclusions */
@@ -151,7 +151,7 @@ class StandardRepK
 /*!
   \brief Element of the fiber group; left torus part of the strong involution
 */
-  tits::TorusPart d_fiberElt; // a SmallBitVector
+  TorusPart d_fiberElt; // a SmallBitVector
 
 /*!
   \brief Character of the rho cover of H^theta, on basis of $(1/2)X^*$
@@ -162,7 +162,7 @@ class StandardRepK
 
   // main constructor is private, used by |SRK_context| methods
   // fundamental bare-bones constructor
-  StandardRepK(size_t cn, const tits::TorusPart& x, const HCParam& lambda)
+  StandardRepK(size_t cn, const TorusPart& x, const HCParam& lambda)
     : d_cartan(cn), d_fiberElt(x), d_lambda(lambda) {}
 
 public:
@@ -208,7 +208,7 @@ struct Cartan_info
   SmallSubspace fiber_modulus;
 
   // simple roots orthogonal to sums of positive imaginary and real roots
-  // in fact one of every pair of $theta$-conjugate such simple roots
+  // a chosen one from each pair of $\theta$-conjugate such simple roots
   RankFlags bi_ortho; // simple roots, and necessarily complex ones
   WeightList sum_coroots; // associated sums of 2 coroots
 
@@ -285,13 +285,13 @@ class SRK_context
   const BinaryMap& dual_reflection(weyl::Generator i) const
   { return simple_reflection_mod_2[i]; }
 
-  //!\brief Projection |Weight| (in doubled coordinates) to |HCParam|
+  // projection (keeping free & torsion parts): doubled |Weight| to |HCParam|
   HCParam project(size_t cn, Weight lambda) const; // by value
 
-  //!\brief A section of |project|
+  // a section of |project|
   Weight lift(size_t cn, HCParam p) const;
 
-  //!\brief (1+theta)* lifted value; this is independent of choice of lift
+  // $(1+\theta)$ times |lift(cn,p)|; this is independent of choice of lift
   Weight theta_lift(size_t cn, HCParam p) const
   {
     Weight result=lift(cn,p);
@@ -305,23 +305,18 @@ class SRK_context
   Weight theta_lift(const StandardRepK& s) const
   { return theta_lift(s.d_cartan,s.d_lambda); }
 
-  StandardRepK std_rep
-    (const Weight& two_lambda, TitsElt a) const;
+  StandardRepK std_rep (const Weight& two_lambda, TitsElt a) const;
 
-  StandardRepK std_rep_rho_plus
-    (Weight lambda, TitsElt a) const
-    {
-      (lambda *= 2) += rootDatum().twoRho();
-      return std_rep(lambda,a);
-    }
-
-  RawRep Levi_rep
-    (Weight lambda, TitsElt a, RankFlags gens)
-    const;
-
+  StandardRepK std_rep_rho_plus (Weight lambda, TitsElt a) const
+  {
+    (lambda *= 2) += rootDatum().twoRho();
+    return std_rep(lambda,a);
+  }
 
   // RepK from KGB number only, with |lambda=rho|; method is currently unused
   StandardRepK KGB_elt_rep(KGBElt z) const;
+
+  RawRep Levi_rep (Weight lambda, TitsElt a, RankFlags gens) const;
 
 /*
   The conditions below are defined by
@@ -356,9 +351,7 @@ class SRK_context
 
   TitsElt titsElt(const StandardRepK& s) const
   {
-    return TitsElt(titsGroup(),
-			 twistedInvolution(s.d_cartan),
-			 s.d_fiberElt);
+    return TitsElt(titsGroup(), twistedInvolution(s.d_cartan), s.d_fiberElt);
   }
 
   KGBEltList sub_KGB(const PSalgebra& q) const;

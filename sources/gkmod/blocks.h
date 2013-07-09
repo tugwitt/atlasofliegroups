@@ -28,14 +28,6 @@ namespace atlas {
 
 namespace blocks {
 
-/******** type declarations *************************************************/
-
-/******** constant declarations *********************************************/
-
-// reserve the last possible unsigned value; it is supposed unused
-const BlockElt UndefBlock = ~ BlockElt(0);
-
-
 
 /******** function declarations *********************************************/
 
@@ -54,7 +46,19 @@ const BlockElt UndefBlock = ~ BlockElt(0);
 
 /******** type definitions **************************************************/
 
-
+struct ext_gen // generator of extended Weyl group
+{
+  enum { one, two, three } type;
+  weyl::Generator s0,s1;
+  WeylWord w_tau;
+  explicit ext_gen (weyl::Generator s)
+    : type(one), s0(s), s1(~0), w_tau() { w_tau.push_back(s); }
+  ext_gen (bool commute, weyl::Generator s, weyl::Generator t)
+  : type(commute ? two : three), s0(s), s1(t)
+  { w_tau.push_back(s);  w_tau.push_back(t);
+    if (not commute) w_tau.push_back(s);
+  }
+};
 
 // The class |BlockBase| serves external functionality, not block construction
 class Block_base
@@ -90,6 +94,7 @@ class Block_base
 
   std::vector<EltInfo> info; // its size defines the size of the block
   std::vector<std::vector<block_fields> > data;  // size |d_rank| * |size()|
+  std::vector<ext_gen> orbits;
 
   // map KGB element |x| to the first block element |z| with |this->x(z)>=x|
   // this vector may remain empty if |element| virtual methodis redefined
@@ -117,10 +122,13 @@ class Block_base
 // accessors
 
   size_t rank() const { return data.size(); } // semisimple rank matters
+  size_t folded_rank() const { return orbits.size(); }
   size_t size() const { return info.size(); }
 
   virtual KGBElt xsize() const = 0;
   virtual KGBElt ysize() const = 0;
+
+  ext_gen orbit(weyl::Generator s) const { return orbits[s]; }
 
   KGBElt x(BlockElt z) const { assert(z<size()); return info[z].x; }
   KGBElt y(BlockElt z) const { assert(z<size()); return info[z].y; }
@@ -132,17 +140,17 @@ class Block_base
 
   BlockElt length_first(size_t l) const; // first element of given length
 
-  BlockElt cross(size_t s, BlockElt z) const //!< cross action
+  BlockElt cross(weyl::Generator s, BlockElt z) const
   { assert(z<size()); assert(s<rank()); return data[s][z].cross_image; }
 
-  BlockEltPair cayley(size_t s, BlockElt z) const //!< Cayley transform
+  BlockEltPair cayley(weyl::Generator s, BlockElt z) const
   { assert(z<size()); assert(s<rank());
     if (not isWeakDescent(s,z))
       return data[s][z].Cayley_image;
     else return BlockEltPair(UndefBlock,UndefBlock);
   }
 
-  BlockEltPair inverseCayley(size_t s, BlockElt z) const //!< inverse Cayley
+  BlockEltPair inverseCayley(weyl::Generator s, BlockElt z) const
   { assert(z<size()); assert(s<rank());
     if (isWeakDescent(s,z))
       return data[s][z].Cayley_image;
@@ -151,22 +159,24 @@ class Block_base
 
   const DescentStatus& descent(BlockElt z) const
     { assert(z<size()); return info[z].descent; }
-  DescentStatus::Value descentValue(size_t s, BlockElt z) const
+  DescentStatus::Value descentValue(weyl::Generator s, BlockElt z) const
     { assert(z<size()); assert(s<rank()); return descent(z)[s]; }
 
-  bool isWeakDescent(size_t s, BlockElt z) const
+  bool isWeakDescent(weyl::Generator s, BlockElt z) const
     { return DescentStatus::isDescent(descentValue(s,z)); }
 
-  bool isStrictAscent(size_t, BlockElt) const;
-  bool isStrictDescent(size_t, BlockElt) const;
-  size_t firstStrictDescent(BlockElt z) const;
-  size_t firstStrictGoodDescent(BlockElt z) const;
+  bool isStrictAscent(weyl::Generator, BlockElt) const;
+  bool isStrictDescent(weyl::Generator, BlockElt) const;
+  weyl::Generator firstStrictDescent(BlockElt z) const;
+  weyl::Generator firstStrictGoodDescent(BlockElt z) const;
 
   BlockElt Hermitian_dual(BlockElt z) const { return info[z].dual; }
 
   // The functor $T_{\alpha,\beta}$; might have been a non-method function
   BlockEltPair link
     (weyl::Generator alpha,weyl::Generator beta,BlockElt y) const;
+
+  virtual const TwistedInvolution& involution(BlockElt z) const =0;
 
   // print whole block to stream (name chosen to avoid masking by |print|)
   std::ostream& print_to
@@ -232,11 +242,12 @@ class Block : public Block_base
   std::vector<RankFlags> d_involutionSupport; // of size |size()|
 
 
- public:
-
 // constructors and destructors
+  // the main constructor is private to ensure consistency of twists of KGBs
   Block(const KGB& kgb,const KGB& dual_kgb);
 
+ public:
+  // use one of the following two pseudo contructors to build |Block| values
   static Block build // pseudo contructor with small (and forgotten) KGB sets
     (ComplexReductiveGroup&, RealFormNbr rf, RealFormNbr drf);
 
@@ -270,11 +281,11 @@ class Block : public Block_base
   This is the corresponding Weyl group element w, such that w.delta is the
   root datum involution tau corresponding to z
 */
-  const TwistedInvolution& involution(BlockElt z) const
+  virtual const TwistedInvolution& involution(BlockElt z) const
     { assert(z<size()); return d_involution[z]; }
 
   //! \brief the simple roots occurring in reduced expression |involution(z)|
-  const RankFlags& involutionSupport(size_t z) const
+  const RankFlags& involutionSupport(BlockElt z) const
   {
     assert(z<size());
     return d_involutionSupport[z];
@@ -310,7 +321,7 @@ class param_block : public Block_base // blocks of parameters
   param_block(const Rep_context& rc, unsigned int rank);
 
   // auxiliary for construction
-  void compute_duals(const ComplexReductiveGroup& G);
+  void compute_duals(const ComplexReductiveGroup& G,const SubSystem& rs);
 
  public:
   // "inherited" accessors
@@ -321,7 +332,6 @@ class param_block : public Block_base // blocks of parameters
   const RatWeight& gamma() const { return infin_char; }
   KGBElt parent_x(BlockElt z) const { return kgb_nr_of[x(z)]; }
   const TorusElement& y_rep(KGBElt y) const { return y_pool[y].repr(); }
-  const TwistedInvolution& involution(BlockElt z) const; // obtained from |kgb|
 
   RatWeight nu(BlockElt z) const; // "real" projection of |infin_char|
   Weight lambda_rho(BlockElt z) const; // reconstruct from y value
@@ -333,35 +343,9 @@ class param_block : public Block_base // blocks of parameters
   // virtual methods
   virtual KGBElt xsize() const { return kgb_nr_of.size(); } // child |x| range
   virtual KGBElt ysize() const { return y_hash.size(); }    // child |y| range
+  virtual const TwistedInvolution& involution(BlockElt z) const; // from |kgb|
 
 }; // |class param_block|
-
-/*
-  The class |gamma_block| class was meant to compute blocks at non-integral
-  infinitesimal character |gamma| using only the integrality subsystem on the
-  dual side. However base-point shifting when converting to and from |y|
-  values using this representation is currently not well enough understood,
-  and therefore this class does not function reliably. The alternative class
-  |non_integeral_block| defined below avoids this problem and appears correct.
-*/
-class gamma_block : public param_block
-{
- public:
-  gamma_block(const repr::Rep_context& rc,
-	      const SubSystemWithGroup& sub,
-	      const StandardRepr& sr,
-	      BlockElt& entry_element	// set to block element matching input
-	      );
-
-
-  virtual std::ostream& print // in block_io.cpp
-   (std::ostream& strm, BlockElt z,bool as_invol_expr) const;
-
-  // new methods
-  RatWeight local_system(BlockElt z) const // reconstruct a |lambda| from |y|
-  { assert(z<size()); return y_rep(y(z)).log_2pi(); }
-
-}; // |class gamma_block|
 
 
 typedef Block_base::EltInfo block_elt_entry;
@@ -405,39 +389,102 @@ class non_integral_block : public param_block
 number of orbits of the twisted involution on the simple roots; this
 corresponds to the appropriate twisted Hecke algebra.
  */
-class hBlock : public Block
+class hBlock
 {
+  const Block& block;
 
   std::vector<BlockElt> d_twist; //twist of each block element, of size size()
   std::vector<BlockElt> d_fixnbr; //position of each block element on
 				  //list d_h, of size size();
-				  //UndefBlock if not fixed. 
+				  //UndefBlock if not fixed.
   std::vector<BlockElt> d_h; // list of fixed elements, of size hsize()
   std::vector<BlockEltList> d_hcross; // of size hrank()
 
  public:
 
   // constructors and destructors
-  hBlock
-    (const KGB& kgb,
-     const KGB& dual_kgb
-     );
+  hBlock (const Block& current_block);
 
-  // std::ostream& print(std::ostream& strm, BlockElt z) const;
+  // methods that make this class look as if it were derived from |Block|
+  const Block& base() const { return block; }
+
+  size_t size() const { return block.size(); }
+  size_t rank() const { return block.rank(); }
+  size_t length(BlockElt z) const { return block.length(z); }
+  BlockElt cross(weyl::Generator s, BlockElt z) const
+  { return block.cross(s,z); }
+  const DescentStatus& descent(BlockElt z) const { return block.descent(z); }
+
+  KGBElt xsize() const { return block.xsize(); }
+  KGBElt ysize() const { return block.ysize(); }
+  size_t Cartan_class(BlockElt z) const { return block.Cartan_class(z); }
+  KGBElt x(BlockElt z) const { return block.x(z); }
+  KGBElt y(BlockElt z) const { return block.y(z); }
+
+  weyl::Generator firstStrictGoodDescent(BlockElt z) const
+  { return block.firstStrictGoodDescent(z); }
+  bool isStrictAscent(weyl::Generator s, BlockElt z) const
+  { return block.isStrictAscent(s,z); }
+
 
   // new methods
 
   size_t hsize() const { return d_h.size(); }
   size_t hrank() const { return d_hcross.size(); }
- 
+
   BlockElt hfixed(BlockElt j) const { return d_h[j]; } //BlockElt
 						     //for jth fixed
   size_t hpos(BlockElt z) const {return d_fixnbr[z]; }
   BlockElt twist(BlockElt z) const { return d_twist[z]; }
-  BlockElt hcross(size_t s,BlockElt j) const { assert(s < hrank()); 
+  BlockElt hcross(size_t s,BlockElt j) const { assert(s < hrank());
     assert(j < hsize()); return d_hcross[s][j]; }
- 
+
+  // std::ostream& print(std::ostream& strm, BlockElt z) const;
+
 }; // |class hBlock|
+
+
+class nblock_elt // internal representation during construction
+{
+  friend class nblock_help;
+  KGBElt xx; // identifies element in parent KGB set
+  TorusElement yy; // adds "local system" information to |xx|
+public:
+  nblock_elt (KGBElt x, const TorusElement& t) : xx(x), yy(t) {}
+
+  KGBElt x() const { return xx; }
+  const TorusElement y() const { return yy; }
+
+}; // |class nblock_elt|
+
+class nblock_help // a support class for |nblock_elt|
+{
+public: // references stored for convenience, no harm in exposing them
+  const KGB& kgb;
+  const RootDatum& rd;  // the full (parent) root datum
+  const SubSystem& sub; // the relevant subsystem
+  const InvolutionTable& i_tab; // information about involutions, for |pack|
+
+private:
+  std::vector<TorusPart> dual_m_alpha; // the simple roots, reduced modulo 2
+  std::vector<TorusElement> half_alpha; // half the simple roots
+
+  void check_y(const TorusElement& t, InvolutionNbr i) const;
+  void parent_cross_act(nblock_elt& z, weyl::Generator s) const;
+  void parent_up_Cayley(nblock_elt& z, weyl::Generator s) const;
+  void parent_down_Cayley(nblock_elt& z, weyl::Generator s) const;
+
+public:
+  nblock_help(RealReductiveGroup& GR, const SubSystem& subsys);
+
+  void cross_act(nblock_elt& z, weyl::Generator s) const;
+  void cross_act_parent_word(const WeylWord& ww, nblock_elt& z) const;
+  void do_up_Cayley (nblock_elt& z, weyl::Generator s) const;
+  void do_down_Cayley (nblock_elt& z, weyl::Generator s) const;
+  bool is_real_nonparity(nblock_elt z, weyl::Generator s) const; // by value
+
+  y_entry pack_y(const nblock_elt& z) const;
+}; // |class nblock_help|
 
 } // |namespace blocks|
 

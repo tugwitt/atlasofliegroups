@@ -90,6 +90,20 @@ invert: (mat->mat,int): invert(M)=inv,d such that M*inv=d*Id, with d minimal.
   The inverse matrix, represented as an integral numerator matrix and a
   minimal common denominator
 
+subspace_normal: ([vec]->[vec],[vec],[vec],[int]) normalised mod2 basis Given
+  a list of binary vectors, find a normalised basis for the subspace they
+  span, expressions for the basis vectors in terms of the given list, a basis
+  for the relations between the vectors, an a list of pivot values. The
+  argument is a list of n generators of size r whose components are
+  interpreted modulo 2, the first output component is a reduced echelon basis,
+  consisting of d binary vectors of size r where d is the dimension of the
+  subspace, the next component has d binary vectors of size n, giving the
+  combination of generators that produced this basis vector, the next
+  component has n-d binary vectors of size n, each giving basis of the
+  linear dependency relations among the gernerators, and the final component
+  is an increasing sequence of nonnegative d integers less than r giving the
+  pivot positions, the first nonzero positions in each of the basis vectors.
+
 Lie_type: (string->LieType): interpret string as Lie type.
   Factors are one of "ABCDEFGT" followed by a number; several factors can be
   concatenated in a string with optional punctuation. Must have total rank<=16
@@ -357,15 +371,21 @@ KGB: (RealFrom,int->KGBElt): select a KGB element x among those of a real form
   The call KGB(i,rf) selects the element in line i of the print_KGB(rf)
   output.
 real_form: (KGBElt->RealForm): the real form for which the argument is defined
+Cartan_class: (KGBElt->CartanClass): the Cartan class for the KGB element
+involution: (KGBElt->mat): the involution associated to the KGB element
 cross: (int,KGBElt->KGBElt): cross action for (generator,KGB element)
 Cayley: (int,KGBElt->KGBElt): Cayley transform for (generator,KGB element)
-  Calling Cayley(s,x) causes an error unless status(s,x)=3 (imag. non-compact)
+  If (and only if) the transform is undefined it returns the same parameter
+inv_Cayley: (int,KGBElt->KGBElt): first inverse Cayley transform
+  If (and only if) the transform is undefined it returns the same parameter
+  Whether there is a second inverse Cayley transform can be found out by
+  applying cross action to the result; it either returns the same result,
+  which signifies a single-value inverse Cayley, or else the second value
 status: (int,KGBElt->int): status of generator on KGB element, scale 0..4
   Encoding 0: Complex descent, 1: imaginary compact, 2: real,
   3: imaginary non-compact, 4:Complex ascent
 twist: (KGBElt->KGBElt): twist of KGB element x, useful for Hermitian dual
   This is defined by conjugation of x by the distinguished involution delta
-involution: (KGBElt->mat): the involution associated to the KGB element
 torus_bits: (KGBElt->vec): torus part of KGB element as vector of 0,1 values
 torus_factor:KGBElt->ratvec): torus part of KGB element, twice that in print_X
   To be interpreted modulo $(2\Z)^n$, and modulo the image of (transposed)
@@ -376,22 +396,45 @@ param: (KGBElt,vec,ratvec->Param): form parameter from (x,lambda-rho,nu)
 operator %: (Param->KGBElt,vec,ratvec): recover (x,lambda-rho,nu) from param
 real_form: (Param->RealForm): recover the real form from a Param value
 infinitesimal_character: (Param->ratvec): infinitesimal character of parameter
+  This is actually a representative of the infinitesimal character, given by
+  gamma = ((1+theta)lambda+(1-theta)nu)/2. The meaning of the x component of
+  the parameter is determined by its position relative to this representative
+  gamma, so to find the x value uniquely associated to the representation for
+  thei parameter, one should apply the function dominant to it first
 is_standard: (Param->bool): whether parameter defines a standard module
+  This is true whenever gamma is dominant relative to the imaginary roots
 is_zero: (Param->bool): whether parameter defines a zero standard module
-is_final: (Param->bool): whether parameter defines a zero standard module
+  True whenever gamma is singular on a compact (for x) simple-imaginary root
+is_final: (Param->bool): whether parameter defines a final standard module
+  False whenever associated standard representation is combination of others
+  on more compact Cartans by a Hecht-Schmid identity. So is_final(p) is true
+  provided no real coroots for which gamma is singular satisfy the parity
+  condition. Note: one could still have is_zero(p); this needs a separate test.
 dominant: (Param->Param): make gamma dominant and do singular complex descents
+  This brings the parameter p into standard form, in which it will appear when
+  p occurs in a ParamPol (which also requires is_final(p) and not is_zero(p)).
 operator =: (Param,Param->bool): test equivalence of parameters
-  This is implemented by applying make_dominant and testing identity of all
+  This is implemented by applying dominant and testing identity of all
   three components x, lambda (defined modulo (1-theta_x)X^*) and nu.
+cross: (int,Param->Param): cross action for (Weyl group generator,parameter)
+  This first argument indexes (starting at 0) a simple root for the subsystem
+  for the given parameter p: integrality_datum(infinitesimal_character(p))
+Cayley: (int,Param->Param): Cayley transform for (Weyl generator,parameter)
+  If (and only if) the transform is undefined it returns the same parameter
+  Find out possible second value by applying cross action to the result
+inv_Cayley: (int,Param->Param): inverse Cayley transform
+  If (and only if) the inverse transform is undefined it returns the same
+  parameter. Find out possible second value of invere transform by applying
+  cross action to the result, which either produces it or else fixes result
 orientation_nr: (Param->int): the orientation number
 reducibility_points: (Param->[rat]): the 0<t<=1 with I(x,lambda,t\nu) reducible
-print_n_block: (Param->): print (nonintegral) block generated from parameter
-n_block: (Param->[Param],int): return block as list of parameters, and index
+print_block: (Param->): print (nonintegral) block generated from parameter
+block: (Param->[Param],int): return block as list of parameters, and index
   The second component is the index into the first of the original parameter.
-KL_block: (Param->[Param],int,mat,[vec],vec,vec,mat): n_block, raw_KL, and more
-  This combines n_block with the Kazhdan-Lustzig table for the block appended,
+KL_block: (Param->[Param],int,mat,[vec],vec,vec,mat): block, raw_KL, and more
+  This combines block with the Kazhdan-Lustzig table for the block appended,
   and two more values that allow cumulation to be performed. The two values of
-  n_block are followed by three values in the format of raw_KL below: a matrix
+  block are followed by three values in the format of raw_KL below: a matrix
   of indices into the following list of polynomials, coded as a list of
   coefficient vectors, and finally a list of indices where the length function
   increases. Finally follow a vector with indices of the block elements for

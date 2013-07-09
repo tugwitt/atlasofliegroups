@@ -16,17 +16,14 @@
 
 namespace atlas {
 
-namespace emptymode {
+namespace commands {
 
   struct EmptymodeTag {};
 
-}
+/******** function and variable declarations ********************************/
 
-/******** function declarations ********************************************/
-
-namespace emptymode {
-
-commands::CommandMode& emptyMode();
+commands::CommandNode emptyNode();
+extern commands::CommandTree empty_mode; // defined in commands.cpp
 
 }
 

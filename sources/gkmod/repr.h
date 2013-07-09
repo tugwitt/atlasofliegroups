@@ -5,7 +5,7 @@
   Copyright (C) 2009-2012 Marc van Leeuwen
   part of the Atlas of Lie Groups and Representations
 
-  See file main.cpp for full copyright notice
+  For license information see the LICENSE file
 */
 
 #ifndef REPR_H  /* guard against multiple inclusions */
@@ -106,10 +106,13 @@ class Rep_context
        const standardrepk::KhatContext& khc,
        const RatWeight& nu) const;
 
-  StandardRepr
-    sr(KGBElt x,
-       const Weight lambda_rho,
-       const RatWeight& nu) const;
+  RatWeight gamma // compute (representative of) infinitesimal character
+    (KGBElt x, const Weight& lambda_rho, const RatWeight& nu) const;
+  StandardRepr sr_gamma // use this one when infinitesimal character is known
+    (KGBElt x, const Weight& lambda_rho, const RatWeight& gamma) const;
+  StandardRepr sr // construct parameter from |(x,\lambda,\nu)| triplet
+    (KGBElt x, const Weight& lambda_rho, const RatWeight& nu) const
+  { return sr_gamma(x,lambda_rho,gamma(x,lambda_rho,nu)); }
 
   StandardRepr sr(const param_block& b, BlockElt i) const;
 
@@ -134,6 +137,10 @@ class Rep_context
 
   RationalList reducibility_points(const StandardRepr& z) const;
 
+  StandardRepr cross(weyl::Generator s, StandardRepr z) const;
+  StandardRepr Cayley(weyl::Generator s, StandardRepr z) const;
+  StandardRepr inv_Cayley(weyl::Generator s, StandardRepr z) const;
+
   class compare
   { Coweight level_vec; // linear form to apply to |gamma| for ordering
   public:
@@ -148,7 +155,6 @@ class Rep_context
 
   poly expand_final(StandardRepr z) const; // express in final SReprs (by value)
 
-  // I/O operations, implemented in basic_io.cpp
   std::ostream& print (std::ostream&,const StandardRepr& z) const;
   std::ostream& print (std::ostream&,const poly& P) const;
 

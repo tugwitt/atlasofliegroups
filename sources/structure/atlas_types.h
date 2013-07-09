@@ -221,8 +221,8 @@ namespace atlas {
   typedef bitmap::BitMap RootNbrSet;
 
   namespace weyl {
-    class WeylInterface;
-    typedef WeylInterface Twist; // use the same implementation
+    class Twist; // diagram automorphism (in practice always an involution)
+    typedef Twist WeylInterface; // no automorphism, but same implementation
     typedef unsigned char Generator; // index of simple root / simple reflection
     struct WeylWord : public std::vector<Generator>  { }; // in weyl namesace
 
@@ -327,10 +327,8 @@ namespace atlas {
   namespace kgb {
     class KGB_base;
     struct KGB_elt_entry;
-    class GlobalFiberData;
     class global_KGB;
     class KGB;
-    class subsys_KGB;
     typedef RankFlags DescentSet;
     class KGP;
   }
@@ -360,13 +358,14 @@ namespace atlas {
   typedef std::vector<hDescentStatus> hDescentStatusList;
 
   namespace blocks {
+    class ext_gen;
     class Block_base;
     class Block;
     class param_block;
-    class gamma_block;
     class non_integral_block;
     class hBlock;
   }
+  using blocks::ext_gen;
   using blocks::Block_base;
   using blocks::Block;
   using blocks::param_block;
@@ -376,6 +375,7 @@ namespace atlas {
   typedef std::vector<BlockElt> BlockEltList;
   typedef std::pair<BlockElt,BlockElt> BlockEltPair;
   typedef std::vector<BlockEltPair> BlockEltPairList;
+  static const BlockElt UndefBlock = ~0u;
 
   namespace klsupport { class KLSupport; }
   namespace wgraph {

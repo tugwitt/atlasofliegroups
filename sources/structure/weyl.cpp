@@ -32,6 +32,7 @@
 #include "permutations.h"// to hold the result from dynkin
 #include "prerootdata.h"// for defining action using only simple (co)roots
 #include "rootdata.h"	// also needed for defining action, and deducing twist
+#include "blocks.h"  // for |ext_gen|
 
 // extra defs for windows compilation -spc
 #ifdef WIN32
@@ -136,6 +137,7 @@ WeylGroup::WeylGroup(const int_Matrix& c)
   , d_maxlength(0)
   , d_longest()
   , d_coxeterMatrix()
+  , Chevalley()
   , d_transducer(d_rank)
   , d_in()
   , d_out()
@@ -173,11 +175,10 @@ WeylGroup::WeylGroup(const int_Matrix& c)
     d_maxlength += d_transducer[j].maxlength();
 
   // and the Weyl group size is the product of the numbers of transducer states
-  for (size_t j = 0; j < d_rank; ++j) {
+  for (size_t j = 0; j < d_rank; ++j)
     d_order *= d_transducer[j].size();
-  }
 
-  // precompute for each |j| the first non-commuting or equal |i<=j|
+  // precompute for each |j| the first non-commuting or equal generator |i<=j|
   for (size_t j = 0; j < d_rank; ++j)
     for (size_t i=0; i<=j; ++i)
       if (d_coxeterMatrix(i,j)!=2)
@@ -185,7 +186,23 @@ WeylGroup::WeylGroup(const int_Matrix& c)
 	d_min_star[j]=i; break;
       }
 
-}
+  // now our Weyl group is operational for computations
+
+  // precompute the Chevalley involution
+  // since we dont have a root datum at hand, we conjugate by |longest()|
+  for (Generator s=0; s<rank(); ++s)
+  {
+    WeylElt w = longest();
+    mult(w,s);
+    mult(w,longest());
+
+    // |w| should be some generator |t|; find which, and store it
+    for (Generator t=0; t<rank(); ++t)
+      if (w==generator(t))
+      {	Chevalley[s] = t; break; }
+  }
+
+} // |WeylGroup::WeylGroup|
 
 
 /******** accessors **********************************************************/
@@ -519,7 +536,7 @@ WeylEltList WeylGroup::reflections() const
 
   This is the mixed-radix interpretation of the sequence of pieces, where
   piece 0 is the least significant one: if $N_i$ is |d_transducer[i].size()|
-  and \f$a_i\in\{0,\ldots,N_i-1\}\f$ is the value of piece |i|, the value is
+  and $a_i\in\{0,\ldots,N_i-1\}$ is the value of piece |i|, the value is
   $a_0+N_0*(a_1+N_1*(a_2+... N_{n-2}*(a_{n-1})...))$
 */
 unsigned long WeylGroup::toUlong(const WeylElt& w) const
@@ -674,23 +691,38 @@ TwistedWeylGroup::TwistedWeylGroup
 {
 }
 
+WeylElt TwistedWeylGroup::dual_twisted(const WeylElt& w) const
+{
+  Twist dual_twist;
+  for (Generator s=0; s<rank(); ++s)
+    dual_twist[s] = W.Chevalley_dual(d_twist[s]);
+  return W.translation(w,dual_twist);
+}
+
+std::vector<ext_gen> TwistedWeylGroup::twist_orbits ()  const
+{
+  unsigned int size=0;
+  for (weyl::Generator s=0; s<rank(); ++s)
+    if (twisted(s)>=s)
+      ++size;
+
+  std::vector<ext_gen> result; result.reserve(size);
+
+  for (weyl::Generator s=0; s<rank(); ++s)
+    if (twisted(s)==s)
+      result.push_back(ext_gen(s));
+    else if (twisted(s)>s)
+      result.push_back(ext_gen(W.commutes(s,twisted(s)),s,twisted(s)));
+
+  return result;
+} // |twist_orbits|
+
+
 Twist TwistedWeylGroup::dual_twist() const
 {
   Twist twist; // "dimensioned" but not initialised
-  for (size_t s=0; s<W.rank(); ++s)
-  {
-    WeylElt w = W.longest();
-    mult(w,twisted(s));
-    mult(w,W.longest()); // now |w| represents $w_0 twist_s w_0$ as WeylElt
-
-    // |w| should be some generator |t|; find which, and store it
-    for (Generator t=0; t<W.rank(); ++t)
-      if (w==W.generator(t))
-      {
-	twist[s] = t; // make outer, since |t| is inner
-	break;
-      }
-  }
+  for (Generator s=0; s<W.rank(); ++s)
+    twist[s] = W.Chevalley_dual(twisted(s));
   return twist;
 }
 
@@ -754,23 +786,23 @@ void TwistedWeylGroup::twistedConjugacyClass
 
 
 /*!
-  \brief Tells whether |w| twisted-commutes with |s|: \f$s.w.\delta(s)=w\f$
+  \brief Tells whether |w| twisted-commutes with |s|: $s.w.\delta(s)=w$
 
-  Precondition: |w| is a twisted involution: \f$w^{-1}=\delta(w)\f$. Therefore
+  Precondition: |w| is a twisted involution: $w^{-1}=\delta(w)$. Therefore
   twisted commutation is equivalent to $s.w$ being a twisted involution.
 
-  This is in fact the case if and only if \f$s.w.\delta(s)\f$ has the same
+  This is in fact the case if and only if $s.w.\delta(s)$ has the same
   length as $w$, by the following reasoning. Suppose first that $s.w$ is
-  reduced, then its twisted inverse \f$w.\delta(s)\f$ is reduced as well. Then
-  the only possible reduction in \f$s.w.\delta(s)\f$ is cancellation of the
+  reduced, then its twisted inverse $w.\delta(s)$ is reduced as well. Then
+  the only possible reduction in $s.w.\delta(s)$ is cancellation of the
   extremal generators; whether this reduction applies is equivalent to having
   twisted commutation. If $s.w$ is not reduced, then neither is
-  \f$w.\delta(s)\f$, and \f$w'=s.w.\delta(s)\f$ is a twisted involution not
+  $w.\delta(s)$, and $w'=s.w.\delta(s)$ is a twisted involution not
   longer than $w$. If it is strictly shorter then obviously twisted
-  commutation fails. In the remaining case that \f$l(s.w.\delta(s))=l(w)\f$,
-  let $v=s.w$ so that $w=s.v$ and \f$w'=v.\delta(s)\f$ are reduced, but
-  \f$w.\delta(s)=s.v.\delta(s)\f$ does reduce, which can only be by cancelling
-  the extremal generators: \f$s.v.\delta(s)=v\f$ which implies $w'=w$, and one
+  commutation fails. In the remaining case that $l(s.w.\delta(s))=l(w)$,
+  let $v=s.w$ so that $w=s.v$ and $w'=v.\delta(s)$ are reduced, but
+  $w.\delta(s)=s.v.\delta(s)$ does reduce, which can only be by cancelling
+  the extremal generators: $s.v.\delta(s)=v$ which implies $w'=w$, and one
   has twisted commutation.
 */
 bool TwistedWeylGroup::hasTwistedCommutation
@@ -784,10 +816,10 @@ bool TwistedWeylGroup::hasTwistedCommutation
 
 
 /*!
-  Precondition: tw is a twisted involution: \f$tw^{-1}=\delta(tw)\f$.
+  Precondition: tw is a twisted involution: $tw^{-1}=\delta(tw)$.
 
   The argument given under |hasTwistedCommutation| shows that for every
-  generator |s| exactly one of $s.tw$ and \f$s.tw.\delta(s)\f$ is a twisted
+  generator |s| exactly one of $s.tw$ and $s.tw.\delta(s)$ is a twisted
   involution distinct from $tw$, and that if $l(s.tw)<l(tw)$ (for the usual
   length function on the Weyl group) then the length of this new twisted
   involution is less than that of $tw$ (by 1 or 2, respectively). A "reduced
@@ -807,7 +839,7 @@ bool TwistedWeylGroup::hasTwistedCommutation
 */
 InvolutionWord TwistedWeylGroup::involution_expr(TwistedInvolution tw) const
 {
-  InvolutionWord result; // result.reserve(involutionLength(tw));
+  InvolutionWord result; result.reserve(involutionLength(tw));
 
   for (Generator s = W.leftDescent(tw.w()); s != UndefGenerator;
                  s = W.leftDescent(tw.w()))
@@ -825,7 +857,7 @@ InvolutionWord TwistedWeylGroup::involution_expr(TwistedInvolution tw) const
   return result;
 }
 
-// This one trades some efficiency for assureance of external least lex repr
+// This one trades some efficiency for assurance of external least lex repr
 InvolutionWord TwistedWeylGroup::canonical_involution_expr(TwistedInvolution tw)
   const
 {
@@ -835,7 +867,7 @@ InvolutionWord TwistedWeylGroup::canonical_involution_expr(TwistedInvolution tw)
   while (tw!=delta)
   {
     Generator s=0;
-    while (not hasDescent(tw,twisted(s)))
+    while (not hasDescent(s,tw))
       ++s;
     // now |s| is the first twisted right equivalently left descent
 
@@ -850,6 +882,89 @@ InvolutionWord TwistedWeylGroup::canonical_involution_expr(TwistedInvolution tw)
       twistedConjugate(tw,s);
     }
 
+  } // while(tw!=delta)
+  return result;
+} // |canonical_involution_expr|
+
+// expression as series of extended-ascents from the trivial involution
+// precondition: |TwistedWeylGroup::twisted(tw)==tw|
+InvolutionWord TwistedWeylGroup::extended_involution_expr(TwistedInvolution tw)
+  const
+{
+  assert(twisted(tw)==tw);
+  std::vector<blocks::ext_gen> orbit = twist_orbits();
+
+  InvolutionWord result; result.reserve(involutionLength(tw));
+
+  TwistedInvolution delta; // distinguished
+  while (tw!=delta)
+  {
+    Generator s=0;
+    while (not hasDescent(orbit[s].s0,tw))
+    {
+      ++s;
+      assert(s<orbit.size());
+    }
+    // now |s| is the first right descent
+
+    switch(orbit[s].type)
+    {
+    case ext_gen::one:
+      if (hasTwistedCommutation(orbit[s].s0,tw))
+      {
+	leftMult(tw,orbit[s].s0); // real
+	result.push_back(s);
+      }
+      else
+      {
+	twistedConjugate(tw,orbit[s].s0); // complex descent
+	result.push_back(~s);
+      }
+      break;
+    case ext_gen::two:
+      if (hasTwistedCommutation(orbit[s].s0,tw))
+      {
+	result.push_back(s); // a double real descent
+	leftMult(tw,orbit[s].s0);
+	leftMult(tw,orbit[s].s1);
+      }
+      else
+      {
+	twistedConjugate(tw,orbit[s].s0);
+	if (hasDescent(orbit[s].s1,tw)) // is |s1| a left descent?
+	{
+	  twistedConjugate(tw,orbit[s].s1);
+	  result.push_back(~s); // two-complex descent
+	}
+	else
+	  result.push_back(s); // semi-real descent
+      }
+      break;
+    case ext_gen::three:
+      if (hasTwistedCommutation(orbit[s].s0,tw))
+      {
+	result.push_back(s); // a real-complex descent
+	leftMult(tw,orbit[s].s0);
+	twistedConjugate(tw,orbit[s].s1);
+      }
+      else
+      {
+	twistedConjugate(tw,orbit[s].s0);
+	if (hasTwistedCommutation(orbit[s].s1,tw))
+	{
+	  leftMult(tw,orbit[s].s1);
+	  result.push_back(s); // complex-real descent
+	}
+	else
+	{
+	  twistedConjugate(tw,orbit[s].s1);
+	  twistedConjugate(tw,orbit[s].s0);
+	  result.push_back(s); // triple complex descent
+	}
+      }
+      break;
+    }
+    assert(twisted(tw)==tw); // stay within the twist-fixed subset
   } // while(tw!=delta)
   return result;
 }

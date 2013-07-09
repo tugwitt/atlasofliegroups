@@ -16,10 +16,13 @@ representing orbits of K on G/B.
 #ifndef KGB_H  /* guard against multiple inclusions */
 #define KGB_H
 
-#include "subdatum.h"
+#include "atlas_types.h"
 
 #include "gradings.h"	// containment in |KGBEltInfo|
 #include "hashtable.h"	// containment in |KGB_base|
+#include "weyl.h"       // |weyl::TI_Entry::Pooltype|
+#include "tits.h"       // containment |GlobalTitsGroup|
+#include "y_values.h"   // containment |TorusElement|
 
 #include <algorithm>
 #include <iostream> // for virtual print method
@@ -215,122 +218,6 @@ struct KGB_elt_entry
 
 }; //  |struct KGB_elt_entry|
 
-/*
-
-A |GlobalFiberData| object associates to each twisted involution a reduced
-description of its -1 eigenspace, which allows a quick test for equivalence of
-|GlobalTitsElement| values at this twisted involution. The object also records
-the halfsum of the positive imaginary coroots, and the Cartan class.
-
-Originally conceived for global use within an inner class (the constructor
-uses its list of Cartan classes to generate all involutions), functionality
-now also includes dynamically adding Cartan classes of involutions, by
-specifying a new twisted involution with its involution matrix, from which a
-whole conjugacy class will be added to the tables. This can even be done using
-only the Weyl group of a (co)root subsystem, giving smaller Cartan classes.
-
-The terminology remains attached to the original use, even though the use with
-dynamical addition of Cartan classes is associated to a |GlobalTitsGroup|,
-which will be employed from the dual side.
- */
-class GlobalFiberData
-{
- protected: // data will also be maintained by derived class |InvInfo|
-  HashTable<weyl::TI_Entry,unsigned int>& hash_table;
-
-  struct inv_info
-  {
-    unsigned int Cartan;
-    int_Matrix proj; // projectors for equivalence
-    Weight check_2rho_imag;
-    RootNbrList simple_imag,simple_real;
-
-  inv_info()
-  : Cartan(~0), proj(), check_2rho_imag(), simple_imag(), simple_real()
-    {} // allow uninitialized construction
-  inv_info(unsigned int c,
-	   const int_Matrix& p,
-	   const Weight& c2ri,
-	   const RootNbrList& si,
-	   const RootNbrList& sr)
-  : Cartan(c),proj(p),check_2rho_imag(c2ri),simple_imag(si),simple_real(sr) {}
-  };
-
-  std::vector<inv_info> info;
-  std::vector<WeightInvolution> refl; // simple reflections at dual side
-
-public:
-  GlobalFiberData(ComplexReductiveGroup& G,
-		  HashTable<weyl::TI_Entry,unsigned int>& h);
-
-  // contructor that does not install eny Cartan classes yet
-  GlobalFiberData(const GlobalTitsGroup& Tg,
-		  HashTable<weyl::TI_Entry,unsigned int>& h);
-
- protected: // this one is for use by |InvInfo||
-  GlobalFiberData(const SubSystem& sub,
-		  HashTable<weyl::TI_Entry,unsigned int>& h);
- public:
-
-  GlobalFiberData(const GlobalFiberData& org) // copy contructor, handle ref
-    : hash_table(org.hash_table) // share
-    , info(org.info)             // copy
-  {}
-
-  //accessors
-  unsigned int find(const TwistedInvolution& tw) const
-  { return hash_table.find(tw); }
-
-  CartanNbr Cartan_class(const TwistedInvolution& tw) const
-  { return info[find(tw)].Cartan;}
-
-  const RootNbrList& imaginary_basis(const TwistedInvolution& tw) const
-  { return info[find(tw)].simple_imag; }
-  const RootNbrList& real_basis(const TwistedInvolution& tw) const
-  { return info[find(tw)].simple_real; }
-
-  bool equivalent(const GlobalTitsElement& x,
-		  const GlobalTitsElement& y) const;
-
-  RatWeight // a value characterizing the equivalence class
-    fingerprint(const GlobalTitsElement& x) const;
-
-  int at_rho_imaginary(const rootdata::Root& alpha, // imaginary root
-		       const TwistedInvolution& tw) const
-    { return alpha.dot(info[hash_table.find(tw)].check_2rho_imag)/2; }
-
-  GlobalTitsElement
-    imaginary_cross(const RootDatum& dual_rd, // pragmatic reason
-		    RootNbr alpha, // any imaginary root
-		    GlobalTitsElement a) const; // |a| is by-value
-
-
-  KGB_elt_entry pack(const GlobalTitsElement& y) const
-  { return KGB_elt_entry(fingerprint(y),y); }
-
-  // manipulators: none here, but |InvInfo| provides two of them
-
-}; // |class GlobalFiberData|
-
-struct InvInfo : public GlobalFiberData
-{
-  const SubSystem& sub;
-  CartanNbr n_Cartans; // number of Cartan classes generated
-
-  InvInfo(const SubSystem& subsys,
-	  HashTable<weyl::TI_Entry,unsigned int>& h);
-
-//manipulators
-  // add involution |tw| with |Tg.involution_matrix(tw)|; report whether new
-  bool add_involution(const TwistedInvolution& tw, const GlobalTitsGroup& Tg);
-
-  // add |tw|, a neighbor of |info[old_inv]| by cross action by |s| of |sub|
-  bool add_cross_neighbor(const TwistedInvolution& tw,
-			  unsigned int old_inv, weyl::Generator s);
-}; // |InvInfo|
-
-
-
 class global_KGB : public KGB_base
 {
   const GlobalTitsGroup Tg;
@@ -339,10 +226,11 @@ class global_KGB : public KGB_base
   global_KGB(const global_KGB& org); // forbid copying
 
  public:
-  global_KGB(ComplexReductiveGroup& G);
+  global_KGB(ComplexReductiveGroup& G, bool dual_twist=false);
 
   global_KGB(ComplexReductiveGroup& G,
-	     const GlobalTitsElement& x); // generate KGB containing |x|
+	     const GlobalTitsElement& x,
+	     bool dual_twist=false); // generate KGB containing |x|
 
 // accessors
   const GlobalTitsGroup& globalTitsGroup() const { return Tg; }
@@ -359,7 +247,7 @@ class global_KGB : public KGB_base
 
  private:
   void generate_involutions(size_t n);
-  void generate(size_t predicted_size);
+  void generate(size_t predicted_size, bool dual_twist);
 
 }; // |class global_KGB|
 
@@ -386,7 +274,7 @@ class KGB : public KGB_base
 
   std::vector<unsigned int> Cartan; ///< records Cartan classes of elements
 
-  std::vector<tits::TorusPart> left_torus_part; // of size |size()|
+  std::vector<TorusPart> left_torus_part; // of size |size()|
   BitSet<NumStates> d_state;
 
 /*! \brief Owned pointer to the Bruhat order on KGB (or NULL).
@@ -397,13 +285,13 @@ and in addition the Hasse diagram (set of all covering relations).
   BruhatOrder* d_bruhat;
 
   //! \brief Owned pointer to the based Tits group.
-  TitsCoset* d_base; // pointer, because contructed late by |generate|
+  TitsCoset* d_base; // pointer, because constructed late by |generate|
 
  public:
 
 // constructors and destructors
   explicit KGB(RealReductiveGroup& GR,
-	       const BitMap& Cartan_classes);
+	       const BitMap& Cartan_classes, bool dual_twist=false);
 
   ~KGB(); // { delete d_bruhat; delete d_base; } // these are owned (or NULL)
 
@@ -421,13 +309,13 @@ and in addition the Hasse diagram (set of all covering relations).
 //! \brief The Tits group.
   const TitsGroup& titsGroup() const { return d_base->titsGroup(); }
 
-  RatWeight half_rho() const { return RatWeight(rootDatum().twoRho(),4); }
+  RatWeight half_rho() const;
 
-  tits::TorusPart torus_part(KGBElt x) const { return left_torus_part[x]; }
+  TorusPart torus_part(KGBElt x) const { return left_torus_part[x]; }
   TorusElement torus_part_global // |torus_part| but coded as in |global_KGB|
     (const RootDatum&rd, KGBElt x) const; // needs root datum (for base grading)
 
-  TitsElt titsElt(KGBElt x) const;
+  TitsElt titsElt(KGBElt x) const; // get KGB element |x| as a |TitsElt|
   size_t torus_rank() const; // the (non-semisimple) rank of torus parts.
 
   Grading base_grading() const { return d_base->base_grading(); }
@@ -451,33 +339,12 @@ and in addition the Hasse diagram (set of all covering relations).
 
 // private methods
 private:
-  size_t generate (RealReductiveGroup& GR,const BitMap& Cartan_classes);
+  bool is_dual_twist_stable(const RealReductiveGroup& GR, TorusPart& shift)
+    const; // auxiliary to see if this dual KGB can be twist-stable
 
   void fillBruhat();
 
 }; // |class KGB|
-
-// extract the KGB for a root subsystem; DV says this is not always possible
-class subsys_KGB : public KGB_base
-{
-  Grading base_grading;
-
- public:
-  std::vector<KGBElt> in_parent; // map elements back to parent, if possible
-  std::vector<unsigned int> Cartan; ///< records Cartan classes of elements
-  std::vector<tits::TorusPart> torus_part; // of size |size()|
-  KGBElt parent_size;
-
-  subsys_KGB(const KGB& kgb,
-	     const subdatum::SubDatum& sub, // must be constructed before
-	     KGBElt x);
-
-// virtual methods
-  virtual CartanNbr Cartan_class(KGBElt x) const // override with subsys Cartan
-  { return Cartan[x];}
-  virtual std::ostream& print(std::ostream& strm, KGBElt x) const;
-
-}; // |struct subsys_KGB|
 
 /* ****************** function definitions **************************** */
 

@@ -1,8 +1,8 @@
 /*
   This is helpmode.h
-  
+
   Copyright (C) 2004,2005 Fokko du Cloux
-  part of the Atlas of Lie Groups and Representations 
+  part of the Atlas of Lie Groups and Representations
 
   For copyright and license information see the LICENSE file
 */
@@ -11,16 +11,18 @@
 #define HELPMODE_H
 
 #include "commands_fwd.h"
-
-/******** function declarations ********************************************/
+#include <iostream>
 
 namespace atlas {
 
-namespace helpmode {
+namespace commands {
 
-  const commands::CommandMode& helpMode();
-  void intro_h();
-  void nohelp_h();
+/******** function and variable declarations ********************************/
+
+  commands::CommandNode helpNode();
+  extern commands::CommandTree help_mode; // defined in commands.cpp
+
+  void intro_h(); // this is used in emptymode as well
 
 }
 

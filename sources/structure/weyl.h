@@ -17,8 +17,7 @@
 #include "atlas_types.h"
 
 #include <cstring>
-
-#include "atlas_types.h"
+#include <cassert>
 
 #include "constants.h"
 #include "tags.h"
@@ -51,11 +50,11 @@ namespace weyl {
   /*!
 \brief A mapping between one interpretation of Generators and another
   */
-  class WeylInterface // also used by synonym Twist, for diagram involutions
+  class Twist // also used by synonym |WeylInterface|
   {
     Generator d[constants::RANK_MAX];
   public:
-    WeylInterface () // assures definite values are always set
+    Twist () // assures definite values are always set
       { std::memset(d,~0,sizeof(d)); }
     Generator& operator[] (size_t i) { return d[i]; }
     const Generator& operator[] (size_t i) const { return d[i]; }
@@ -426,6 +425,8 @@ class WeylGroup
   unsigned long d_maxlength;
   WeylElt d_longest;
   int_Matrix d_coxeterMatrix;
+  Twist Chevalley;
+
   std::vector<Transducer> d_transducer;
   WeylInterface d_in;
   WeylInterface d_out;
@@ -548,9 +549,19 @@ public:
  */
   Generator leftDescent(const WeylElt& w) const;
 
+  bool commutes (Generator s, Generator t) const
+  {
+    WeylElt w = generator(s);
+    conjugate(w,t);
+    return w==generator(s);
+  }
+
   const WeylElt& longest() const { return d_longest; }
 
-  // correspondence with dual Weyl group; is coherent with twist on right
+  Generator Chevalley_dual(Generator s) const // conjugation by |longest()|
+  { assert(s<rank()); return Chevalley[s]; }
+
+  // correspondence with dual Weyl group; is coherent with \delta on the right!
   WeylElt opposite (const WeylElt& w) const { return prod(w,d_longest); }
 
   unsigned long maxlength() const { return d_maxlength; }
@@ -678,9 +689,14 @@ public:
   Generator twisted(Generator s) const { return d_twist[s]; }
   WeylElt twisted(const WeylElt& w) const { return W.translation(w,d_twist); }
 
+  Generator dual_twisted(Generator s) const
+  { return W.Chevalley_dual(d_twist[s]); }
+  WeylElt dual_twisted(const WeylElt& w) const;
+
   const Twist& twist() const { return d_twist; } // noun "twist"
   void twist(WeylElt& w) const { w=twisted(w); } // verb "twist"
 
+  std::vector<ext_gen> twist_orbits () const;
   Twist dual_twist() const; // the twist for the dual twisted Weyl group
 
   /*!
@@ -729,9 +745,13 @@ public:
 
  /*!
   \brief Returns a reduced expression of |tw| as a twisted involution.
+  The second form assures the lexicographically first possible form is used
 */
    InvolutionWord involution_expr(TwistedInvolution tw) const; // call by value
    InvolutionWord canonical_involution_expr(TwistedInvolution tw) const; // idem
+
+   // extended involution expression for a twist-fixed twisted involution
+   InvolutionWord extended_involution_expr(TwistedInvolution tw) const; // idem
 
   //!\brief Roots that are images of the simple roots under involution of |tw|
   RootNbrList simple_images

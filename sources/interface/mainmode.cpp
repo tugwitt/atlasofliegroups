@@ -2,6 +2,7 @@
   This is mainmode.cpp
 
   Copyright (C) 2004,2005 Fokko du Cloux
+  Copyright 2013 Marc van Leeuwen
   part of the Atlas of Lie Groups and Representations
 
   For copyright and license information see the LICENSE file
@@ -33,6 +34,7 @@
 
 namespace atlas {
 
+namespace commands {
 
 /****************************************************************************
 
@@ -54,9 +56,7 @@ namespace atlas {
 
 namespace {
 
-  using namespace mainmode;
-
-  void main_mode_entry() throw(commands::EntryError);
+  void main_mode_entry() throw(EntryError);
   void main_mode_exit();
 
   // functions for the predefined commands
@@ -76,7 +76,7 @@ namespace {
   void blocksizes_f();
   void gradings_f();
   void strongreal_f();
-  void dual_kgb_f();
+  void dualkgb_f();
   void help_f();
 
   // local variables
@@ -86,7 +86,7 @@ namespace {
   ComplexReductiveGroup* dual_G_C_pointer=NULL;
   complexredgp_io::Interface* G_I_pointer=NULL;
 
- }
+} // |namespace|
 
 
 /*****************************************************************************
@@ -94,8 +94,6 @@ namespace {
         Chapter I -- Functions declared in mainmode.h
 
 ******************************************************************************/
-
-namespace mainmode {
 
 ComplexReductiveGroup& currentComplexGroup()
 
@@ -125,17 +123,12 @@ void replaceComplexGroup(ComplexReductiveGroup* G
   G_C_pointer=G;
   dual_G_C_pointer=NULL;
   G_I_pointer=I;
-
 }
 
-} // namespace mainmode
 
 /****************************************************************************
 
-        Chapter II -- The main mode |CommandMode|
-
-  One instance of |CommandMode| for the main mode is created at the
-  first call of |mainMode()|; further calls just return a reference to it.
+        Chapter II -- The main mode |CommandNode|
 
 *****************************************************************************/
 
@@ -147,68 +140,70 @@ namespace {
   It attempts to set the group type interactively. Throws an EntryError on
   failure.
 */
-void main_mode_entry() throw(commands::EntryError)
+void main_mode_entry() throw(EntryError)
 {
   try {
     interactive::getInteractive(G_C_pointer,G_I_pointer);
   }
   catch(error::InputError& e) {
     e("complex group not set");
-    throw commands::EntryError();
+    throw EntryError();
   }
 }
 
-// function only called from |commands::exitMode|
+// function only called from |exitMode|
 void main_mode_exit()
 {
   replaceComplexGroup(NULL,NULL);
 }
 
-} // namespace
+} // |namespace|
 
-
-namespace mainmode {
 
 /*
-  Synopsis: returns a |CommandMode| object that is constructed on first call.
+  Synopsis: returns a |CommandNode| object that is constructed during the call.
 */
-commands::CommandMode& mainMode()
+CommandNode mainNode()
 {
-  static commands::CommandMode main_mode
-    ("main: ",main_mode_entry,main_mode_exit);
-  if (main_mode.empty()) // true on first call
-  {
-    // add the commands from the empty mode
-    main_mode.addCommands(emptymode::emptyMode());
+  CommandNode result ("main: ",main_mode_entry,main_mode_exit);
+  result.add("type",type_f,"override"); // tag is a dummy
+  result.add("cmatrix",cmatrix_f,"prints the Cartan matrix",std_help);
+  result.add("rootdatum",rootdatum_f,"outputs the root datum",std_help);
+  result.add("roots",roots_f,
+	     "outputs the roots in the lattice basis",std_help);
+  result.add("coroots",coroots_f,
+	     "outputs the coroots in the lattice basis",std_help);
+  result.add("simpleroots",simpleroots_f,
+	     "outputs the simple roots in the lattice basis",std_help);
+  result.add("simplecoroots",simplecoroots_f,
+	     "outputs the simple coroots in the lattice basis",std_help);
+  result.add("posroots",posroots_f,
+	     "outputs the positive roots in the lattice basis",std_help);
+  result.add("poscoroots",poscoroots_f,
+	     "outputs the positive coroots in the lattice basis",std_help);
+  result.add("realform",realform_f,
+	     "sets the real form for the group",std_help);
+  result.add("showrealforms",showrealforms_f,
+	     "outputs the weak real forms for this complex group",std_help);
+  result.add("showdualforms",showdualforms_f,
+	     "outputs the weak real forms for the dual group",std_help);
+  result.add("blocksizes",blocksizes_f,
+	     "outputs the matrix of blocksizes",std_help);
+  result.add("gradings",gradings_f,
+	     "prints gradings of imaginary roots for real forms",std_help);
+  result.add("strongreal",strongreal_f,
+	     "outputs information about strong real forms",std_help);
+  // the next function is in main mode since no real form needed
+  result.add("dualkgb",dualkgb_f,
+	     "prints the KGB data for a dual real form",std_help);
+  result.add("help",help_f,"override");
+  result.add("q",exitMode,"override"); // q defined but inactive in empty mode
 
-    // add the commands from the current mode
-    main_mode.add("type",type_f);
-    main_mode.add("cmatrix",cmatrix_f);
-    main_mode.add("rootdatum",rootdatum_f);
-    main_mode.add("roots",roots_f);
-    main_mode.add("coroots",coroots_f);
-    main_mode.add("simpleroots",simpleroots_f);
-    main_mode.add("simplecoroots",simplecoroots_f);
-    main_mode.add("posroots",posroots_f);
-    main_mode.add("poscoroots",poscoroots_f);
-    main_mode.add("realform",realform_f);
-    main_mode.add("showrealforms",showrealforms_f);
-    main_mode.add("showdualforms",showdualforms_f);
-    main_mode.add("blocksizes",blocksizes_f);
-    main_mode.add("gradings",gradings_f);
-    main_mode.add("strongreal",strongreal_f);
-    main_mode.add("dualkgb",dual_kgb_f); // here, since no real form needed
-    main_mode.add("help",help_f); // override
-    main_mode.add("q",commands::exitMode);
+  // add test commands
 
-    // add test commands
-
-    test::addTestCommands(main_mode,MainmodeTag());
-  }
-  return main_mode;
+  test::addTestCommands<MainmodeTag>(result);
+  return result;
 }
-
-} // namespace mainmode
 
 /*****************************************************************************
 
@@ -309,7 +304,7 @@ void poscoroots_f()
 
 void help_f() // override more extensive help of empty mode by simple help
 {
-  helpmode::helpMode().activate();
+  help_mode.activate();
 }
 
 // Print the matrix of blocksizes.
@@ -321,7 +316,7 @@ void blocksizes_f()
 // Activates real mode (user will select real form)
 void realform_f()
 {
-  realmode::realMode().activate();
+  real_mode.activate();
 }
 
 
@@ -372,13 +367,13 @@ void strongreal_f()
   file << "\n";
   realredgp_io::printStrongReal
     (file,
-     mainmode::currentComplexGroup(),
-     mainmode::currentComplexInterface().realFormInterface(),
+     currentComplexGroup(),
+     currentComplexInterface().realFormInterface(),
      cn);
 }
 
 // Print a kgb table for a dual real form.
-void dual_kgb_f()
+void dualkgb_f()
 {
   ComplexReductiveGroup& G_C = currentComplexGroup();
 
@@ -413,6 +408,7 @@ void type_f()
     complexredgp_io::Interface* I;
     interactive::getInteractive(G,I);
     replaceComplexGroup(G,I);
+    drop_to(main_mode); // drop invalidated descendant modes if called from them
   }
   catch(error::InputError& e) {
     e("complex group not changed");
@@ -420,6 +416,9 @@ void type_f()
 
 }
 
-} // namespace
 
-} // namespace atlas
+} // |namespace|
+
+} // |namespace commands|
+
+} // |namespace atlas|

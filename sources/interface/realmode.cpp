@@ -43,11 +43,11 @@
 
 namespace atlas {
 
+namespace commands {
+
 namespace {
 
-  using namespace realmode;
-
-  void real_mode_entry() throw(commands::EntryError);
+  void real_mode_entry() throw(EntryError);
   void real_mode_exit();
 
   // functions for the predefined commands
@@ -66,17 +66,20 @@ namespace {
   void kgporder_f();
   void kgpgraph_f();
 
-  void type_f();
   void realform_f();
   void dualrealform_f();
   void repr_f();
 
+  // help commands
+  void KGB_h();
+
+  // command tags for the help facility
 
   // local variables
 
   RealReductiveGroup* G_R_pointer=NULL;
   Rep_table* rt=NULL;
-}
+} // |namespace|
 
 /*****************************************************************************
 
@@ -84,42 +87,39 @@ namespace {
 
 ******************************************************************************/
 
-namespace realmode {
-
-// Return a |CommandMode| object that is constructed on first call.
-commands::CommandMode& realMode()
+// Return a |CommandNode| object that is constructed on first call.
+CommandNode realNode()
 {
-  static commands::CommandMode real_mode
-    ("real: ",real_mode_entry,real_mode_exit);
-  if (real_mode.empty()) // true upon first call
-  {
-    // add the commands from the main mode
-    real_mode.addCommands(mainmode::mainMode());
+  CommandNode result("real: ",real_mode_entry,real_mode_exit);
 
-    // add commands for this mode
-    real_mode.add("components",components_f);
-    real_mode.add("cartan",cartan_f);
-    real_mode.add("corder",corder_f);
-    real_mode.add("realweyl",realweyl_f);
-    real_mode.add("kgb",kgb_f);
-    real_mode.add("KGB",KGB_f);
-    real_mode.add("kgborder",kgborder_f);
-    real_mode.add("kgbtwist",kgbtwist_f);
-    real_mode.add("kgbgraph",kgbgraph_f);
-    real_mode.add("kgp", kgp_f);
-    real_mode.add("kgporder", kgporder_f);
-    real_mode.add("kgpgraph", kgpgraph_f);
-    // the "type" command should be redefined here because it needs to exit
-    // the real mode
-    real_mode.add("type",type_f); // override
-    real_mode.add("realform",realform_f); // override
-    real_mode.add("dualrealform",dualrealform_f);
-    real_mode.add("repr",repr_f);
+  result.add("realform",realform_f,"override");
+  result.add("components",components_f,
+	     "describes component group of the real group",std_help);
+  result.add("cartan",cartan_f,
+	     "prints the conjugacy classes of Cartan subgroups",std_help);
+  result.add("corder",corder_f,
+	     "shows Hasse diagram of ordering of Cartan classes",std_help);
+  result.add("realweyl",realweyl_f,
+	     "outputs the structure of the real Weyl group",std_help);
+  result.add("kgb",kgb_f,"prints the orbits of K on G/B",std_help);
+  result.add("KGB",KGB_f,
+	     "computes KGB data (more information than the kgb command)",KGB_h);
+  result.add("kgborder",kgborder_f,
+	     "prints the Bruhat ordering on K\\G/B",std_help);
+  result.add("kgbtwist",kgbtwist_f,"shows twist orbits on K\\G/B");
+  result.add("kgbgraph",kgbgraph_f,
+	     "makes a 'dot' file for the Bruhat ordering on K\\G/B",std_help);
+  result.add("kgp", kgp_f,"prints the orbits of K on G/P",std_help);
+  result.add("kgporder", kgporder_f,
+	     "prints the Bruhat ordering on K\\G/P",std_help);
+  result.add("kgpgraph", kgpgraph_f,
+	     "makes a 'dot' file for the Bruhat ordering on K\\G/P",std_help);
+  result.add("dualrealform",dualrealform_f,"sets the dual real form",use_tag);
+  result.add("repr",repr_f,"sets the parameter for a representation",use_tag);
 
-    // add test commands
-    test::addTestCommands(real_mode,RealmodeTag());
-  }
-  return real_mode;
+  // add test commands
+  test::addTestCommands<RealmodeTag>(result);
+  return result;
 }
 
 RealReductiveGroup& currentRealGroup()
@@ -135,14 +135,12 @@ RealFormNbr currentRealForm()
 const Rep_context& currentRepContext() { return *rt; }
 Rep_table& currentRepTable() { return *rt; }
 
-} // namespace realmode
-
 
 /****************************************************************************
 
-        Chapter II -- The real mode |CommandMode|
+        Chapter II -- The real mode |CommandNode|
 
-  One instance of |CommandMode| for the real mode is created at the
+  One instance of |CommandNode| for the real mode is created at the
   first call of |realMode()|; further calls just return a reference to it.
 
 *****************************************************************************/
@@ -153,19 +151,19 @@ namespace {
   Synopsis: attempts to set a real form interactively. In case of failure,
   throws an InputError and returns.
 */
-void real_mode_entry() throw(commands::EntryError)
+void real_mode_entry() throw(EntryError)
 {
   try
   {
     G_R_pointer=new RealReductiveGroup
-      (interactive::getRealGroup(mainmode::currentComplexInterface()));
+      (interactive::getRealGroup(currentComplexInterface()));
     rt = new Rep_table(currentRealGroup());
   }
   catch(error::InputError& e)
   {
     real_mode_exit(); // clean up
     e("no real form set");
-    throw commands::EntryError();
+    throw EntryError();
   }
 }
 
@@ -177,9 +175,10 @@ void realform_f()
 {
   try
   { // we can call the swap method for rvalues, but not with and rvalue arg
-    interactive::getRealGroup(mainmode::currentComplexInterface()).swap
+    interactive::getRealGroup(currentComplexInterface()).swap
       (currentRealGroup());
     delete rt; rt = new Rep_table(currentRealGroup());
+    drop_to(real_mode); // drop invalidated descendant modes if called from them
   }
   catch (error::InputError& e)
   {
@@ -199,7 +198,6 @@ void real_mode_exit()
 }
 
 
-} // namespace
 
 /*****************************************************************************
 
@@ -209,8 +207,6 @@ void real_mode_exit()
   various commands defined in this mode.
 
 ******************************************************************************/
-
-namespace {
 
 /*
   Print the (dual) component group of the current group. We print it out
@@ -236,7 +232,7 @@ void cartan_f()
 
   static_cast<std::ostream&>(file) << std::endl;
   realredgp_io::printCartanClasses(file,currentRealForm(),
-				   mainmode::currentComplexInterface())
+				   currentComplexInterface())
     << std::endl;
 }
 
@@ -253,13 +249,15 @@ void corder_f()
 // enter block mode
 void dualrealform_f()
 {
-  blockmode::blockMode().activate();
+  drop_to(real_mode); // ensure we have left any descendent mode
+  block_mode.activate();
 }
 
 // enter repr mode
 void repr_f()
 {
-  reprmode::reprMode().activate();
+  drop_to(real_mode); // ensure we have left any descendent mode
+  repr_mode.activate();
 }
 
 // Show the structure of the real weyl group.
@@ -289,7 +287,7 @@ void kgb_f()
 // Same, but with more info and non-traditional generation
 void KGB_f()
 {
-  RealReductiveGroup& G_R = realmode::currentRealGroup();
+  RealReductiveGroup& G_R = currentRealGroup();
   std::cout << "kgbsize: " << G_R.KGB_size() << std::endl;
 
   ioutils::OutputFile f;
@@ -319,25 +317,6 @@ void kgbtwist_f()
   kgb_io::print_twist(file,G.kgb());
 }
 
-/* Reset the type of the complex group.
-
-  In case of success, the real forms are invalidated, and therefore we
-  should exit real mode; in case of failure, we don't need to.
-*/
-void type_f()
-{
-  try {
-    ComplexReductiveGroup* G;
-    complexredgp_io::Interface* I;
-
-    interactive::getInteractive(G,I);
-    mainmode::replaceComplexGroup(G,I);
-    commands::exitMode(); // upon success pop real mode, destroying real group
-  }
-  catch (error::InputError& e) {
-    e("complex group and real form not changed");
-  }
-}
 
 void kgbgraph_f()
 {
@@ -439,6 +418,16 @@ void kgpgraph_f()
   kgp.makeDotFile(file);
 }
 
+
+
+void KGB_h()
+{
+  io::printFile(std::cerr,"KGB_.help",io::MESSAGE_DIR);
+}
+
+
 } // namespace
+
+} // |namespace commands|
 
 } // namespace atlas

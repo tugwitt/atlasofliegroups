@@ -31,61 +31,56 @@
 
 namespace atlas {
 
-namespace {
+namespace commands {
 
-  using namespace emptymode;
+namespace {
 
   void printVersion();
 
   // functions for the predefined commands
 
   void help_f();
-  void q_h();
   void type_f();
   void extract_graph_f();
   void extract_cells_f();
 
-}
+} // |namespace|
 
 /****************************************************************************
 
-        Chapter I -- The empty mode |CommandMode|
+        Chapter I -- The empty mode |CommandNode|
 
-  One instance of |CommandMode| for the empty mode is created at the
-  first call of |emptyMode()|; further calls just return a reference to it.
+  An instance of |CommandNode| for the empty mode is created at the first
+  and unique call of |emptyNode()|.
 
 *****************************************************************************/
 
-namespace emptymode {
-
-
 /*
-  Synopsis: returns a |CommandMode| object that is constructed on first call.
+  Synopsis: returns a |CommandNode| object that is constructed on first call.
 */
-commands::CommandMode& emptyMode()
+CommandNode emptyNode()
 {
-  static commands::CommandMode
-    empty_mode("empty: ",printVersion,commands::relax_f);
+  CommandNode result("empty: ",printVersion,relax_f);
+  result.nohelp_add("",relax_f); // so typing nothing is OK
+  result.add("help",help_f,"enters help mode",std_help);
+  result.add("q",std_help,  // in empty mode "q" gives help information,
+	     "exits the current mode",exitMode); // in help mode it exits
 
-  if (empty_mode.empty()) // amazingly only true on first call!
-  {
-    empty_mode.add("",commands::relax_f); // so typing nothing is OK
-    empty_mode.add("help",help_f);
-    empty_mode.add("q",q_h); // in empty mode "q" just gives help information
-    empty_mode.add("qq",commands::exitInteractive);
-    // the type command needs to be recognized in the empty mode, or else
-    // it will trigger activation of the main mode and _then_ execute, which
-    // leads to setting the type twice!
-    empty_mode.add("type",type_f);
-    empty_mode.add("extract-graph",extract_graph_f);
-    empty_mode.add("extract-cells",extract_cells_f);
+  result.add("qq",exitInteractive,"exits the program",std_help);
 
-    test::addTestCommands(empty_mode,EmptymodeTag());
-  }
-  return empty_mode;
+  // the type command needs to be recognized in the empty mode, or else
+  // it will trigger activation of the main mode and _then_ execute, which
+  // leads to setting the type twice!
+  result.add("type",type_f,"sets or resets the group type",std_help);
+  result.add("extract-graph",extract_graph_f,
+	     "reads block and KL binary files and prints W-graph",use_tag);
+  result.add("extract-cells",extract_cells_f,
+	     "reads block and KL binary files and prints W-cells",use_tag);
+
+  test::addTestCommands<EmptymodeTag>(result);
+  return result;
 }
 
-} // namespace emptymode
 
 /*****************************************************************************
 
@@ -99,26 +94,14 @@ commands::CommandMode& emptyMode()
 namespace {
 
 void help_f()
-
 {
-  helpmode::intro_h();
-  helpmode::helpMode().activate();
-}
-
-void q_h()
-
-{
-  io::printFile(std::cerr,"q.help",io::MESSAGE_DIR);
+  intro_h();
+  help_mode.activate();
 }
 
 void type_f()
-
 {
-  try {
-    mainmode::mainMode().activate();
-  }
-  catch (commands::EntryError) { // silently ignore failure to enter
-  }
+  main_mode.activate();
 }
 
 
@@ -146,8 +129,6 @@ void extract_cells_f()
 }
 
 
-}
-
 /****************************************************************************
 
         Chapter III --- Utilities.
@@ -158,14 +139,12 @@ void extract_cells_f()
 
 *****************************************************************************/
 
-namespace {
-
-void printVersion()
 
 /*
   Prints an opening message and the version number.
 */
 
+void printVersion()
 {
   std::cout << "This is " << version::NAME << " version " << version::VERSION
 	    << "." << std::endl;
@@ -175,6 +154,8 @@ void printVersion()
 	    << std::endl << std::endl;
 }
 
-} // namespace
+} // |namespace|
 
-} // namespace atlas
+} // |namespace commands|
+
+} // |namespace atlas|

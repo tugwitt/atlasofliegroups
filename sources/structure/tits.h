@@ -30,8 +30,6 @@ TitsGroup and TitsElt.
 
 #include "cartanclass.h"
 
-#include "subdatum_fwd.h" // not subdatum.h, which includes us
-
 namespace atlas {
 
 namespace tits {
@@ -131,35 +129,15 @@ class GlobalTitsElement
    reduction of the |TorusElement| component that could be applied after
    Cayley transforms (and should be for deciding equality) is not implemented
    here, since it depends on the twisted involution in a way that is more
-   efficiently handled by tabulation than by on-the-fly computation (cf.
-   |kgb::GlobalFiberData|).
+   efficiently handled by tabulation than by on-the-fly computation.
 
-   This class has two applications: the main one is just to be able to
-   manipulate a given |GlobalTitsElement|, which in practice is used for |y|
-   values for the construction of possibly non-integral blocks. However, for
-   testing purposes an initial application was to build a |GlobalTitsGroup| as
-   a substitute for the |TitsGroup| and |TitsCoset| support classes handling
-   |x| values. It is then attached to a whole inner class rather than to a
-   specific real form (as |TitsCoset| is) and as a consequence it can generate
-   "all" valid elements for it (the command 'X'). For the latter purpose the
-   |square_class_gen| and associated method are included, which permits
-   listing a set of initial elements from which others can be deduced. For the
-   main application however this field can be left an empty list, so as not to
-   waste any time computing it during construction. This dichotomy should of
-   course be reimplemented through a derived class.
-
-   Another heritage of this double usage is an ambiguity in terminology: in
-   the main use the |GlobalTitsElement|s are |y| values, in which case the
-   perspective is from that side; for instance the matrix |delta_tr|, called
-   transposed, will actually be one that acts on character lattice $X^*$, and
-   defines the most split Cartan. However, in the initial use they are |x|
-   values (the output of 'X' "contains" the KGB structures for any real form).
-   Terminology in comments is relative to the side of |GlobalTitsElement|, so
-   saying the |simple| field below is on the "dual side" means that in
-   handling |y| values, it is (a subdatum viewed from the side of) the
-   original root datum; also "imaginary roots" are then real coroots for that
-   original datum. The resulting ambiguity only slightly affects method names:
-   for instance (imaginary) |compact| means (real) "nonparity" for |y|-use.
+   This class could be an alternative to the older |TitsGroup| and |TitsCoset|
+   support classes handling |x| values. It is then attached to a whole inner
+   class rather than to a specific real form, as |TitsCoset| is, whence the
+   "Global". As a consequence it can generate "all" valid elements for it (the
+   command 'X'). For the latter purpose the |square_class_gen| member and
+   associated method are included, which permits listing a set of initial
+   elements from which others can be deduced.
  */
 class GlobalTitsGroup : public TwistedWeylGroup
 {
@@ -176,16 +154,8 @@ class GlobalTitsGroup : public TwistedWeylGroup
   GlobalTitsGroup& operator= (const GlobalTitsGroup&);
 
  public:
-  //!\brief constructor for inner class (use after latter is fully constructed)
+  // for implementing 'X' for inner class (when latter is fully constructed)
   GlobalTitsGroup(const ComplexReductiveGroup& G);
-
-  //!\brief constructor for dual inner class (the side of following contructor)
-  GlobalTitsGroup(const ComplexReductiveGroup& G,tags::DualTag);
-
-  //!\brief constructor from subdatum (dual side) + involution information
-  GlobalTitsGroup(const SubSystemWithGroup& sub,
-  		  const WeightInvolution& theta, // on opposite side from |sub|
-		  WeylWord& ww); // output: expresses |-theta^t| for |sub|
 
   // accessors
   size_t semisimple_rank() const { return alpha_v.size(); }
@@ -207,9 +177,11 @@ class GlobalTitsGroup : public TwistedWeylGroup
   WeightInvolution involution_matrix(const WeylElt& tw) const;
 
   using TwistedWeylGroup::twisted; // overloaded in this class
+  using TwistedWeylGroup::dual_twisted; // overloaded in this class
   using TwistedWeylGroup::twist;   // idem
 
   TorusElement twisted(const TorusElement& x) const;
+  TorusElement dual_twisted(const TorusElement& x) const;
 //void twist(TorusElement& x) const { x = twisted(x); }
 
 
@@ -231,6 +203,8 @@ class GlobalTitsGroup : public TwistedWeylGroup
 		const SubSystem& sub) const; // central in subgroup
   GlobalTitsElement twisted(const GlobalTitsElement& a) const
   { return GlobalTitsElement(twisted(a.t),twisted(a.w)); }
+  GlobalTitsElement dual_twisted(const GlobalTitsElement& a) const
+  { return GlobalTitsElement(dual_twisted(a.t),dual_twisted(a.w)); }
 
 
   // determine status of simple root, if assumed imaginary
@@ -298,26 +272,6 @@ class GlobalTitsGroup : public TwistedWeylGroup
 
 
 
-//			     |class SubTutsGroup|
-
-
-// a class that also stores a torus part induced by the parent base involution
-// used only to implement the 'embedding' command, whence it has few methods
-class SubTitsGroup : public GlobalTitsGroup
-{
-  GlobalTitsGroup parent; // a second one!
-  const SubSystem& subsys;
-  TorusElement t;
- public:
-  //!\brief constructor from subdatum (dual side) + involution information
-  SubTitsGroup(const ComplexReductiveGroup& G,
-	       const SubSystemWithGroup& sub,
-	       const WeightInvolution& theta,
-	       WeylWord& ww); // output: expesses |-theta^t| for |sub|
-  TorusElement base_point_offset(const TwistedInvolution& tw) const;
-};
-
-
 
 //			       |class TitsElt|
 
@@ -362,7 +316,7 @@ class SubTitsGroup : public GlobalTitsGroup
 \brief Represents an element of a Tits group.
 
 An element is always written $t.\sigma_w$, with $\sigma_w$ the canonical lift
-to the Tits group of a Weyl group element $w$, and \f$t \in H(2)\f$.
+to the Tits group of a Weyl group element $w$, and $t \in H(2)$.
   */
 class TitsElt
 {
@@ -378,7 +332,7 @@ class TitsElt
 
 If the Weyl group element $w$ has a reduced decomposition $s_1,...,s_r$, then
 the canonical representative is the product of the corresponding Tits group
-elements \f$\sigma_1,...,\sigma_r\f$. Because the \f$\sigma_i\f$ satisfy the
+elements $\sigma_1,...,\sigma_r$. Because the $\sigma_i$ satisfy the
 braid relations, this canonical representative is independent of the choice of
 reduced decomposition.
   */
@@ -467,26 +421,26 @@ reduced decomposition.
   group) as defined in J. Tits, J. of Algebra 4 (1966), pp. 96-116.
 
   The slight variant is that we include all elements of order two in the
-  torus, instead of just the subgroup generated by the \f$m_\alpha\f$ (denoted
-  \f$h_\alpha\f$ in Tits' paper.) Tits' original group may be defined by
-  generators \f$\sigma_\alpha\f$ for \f$\alpha\f$ simple, subject to the braid
-  relations and to \f$\sigma_\alpha^2= m_\alpha\f$; to get our group we just
+  torus, instead of just the subgroup generated by the $m_\alpha$ (denoted
+  $h_\alpha$ in Tits' paper.) Tits' original group may be defined by
+  generators $\sigma_\alpha$ for $\alpha$ simple, subject to the braid
+  relations and to $\sigma_\alpha^2= m_\alpha$; to get our group we just
   add a basis of elements of $H(2)$ as additional generators, and express the
-  \f$m_\alpha\f$ in this basis. This makes for a simpler implementation, where
+  $m_\alpha$ in this basis. This makes for a simpler implementation, where
   torus parts are just elements of the $\Z/2\Z$-vector space $H(2)$.
 
   We have not tried to be optimally efficient here, as it is not expected that
   Tits computations will be significant computationally (dixit Fokko).
 
-  Note on independence of choices: given a root \f$\alpha\f$ for $H$ in $G$,
-  the corresponding homomorphism \f$\phi_\alpha\f$ from $SL(2)$ to $G$ is
+  Note on independence of choices: given a root $\alpha$ for $H$ in $G$,
+  the corresponding homomorphism $\phi_\alpha$ from $SL(2)$ to $G$ is
   defined only up to conjugation by $H$. This means that the generator
-  \f$\sigma_\alpha\f$ of the Tits group appears to be defined only up to
-  multiplication by the image of the coroot \f$\alpha^\vee\f$. But we are
-  fixing a pinning, which means in particular that the maps \f$\phi_\alpha\f$
-  for \f$\alpha\f$ simple are canonically defined (by the requirement that the
+  $\sigma_\alpha$ of the Tits group appears to be defined only up to
+  multiplication by the image of the coroot $\alpha^\vee$. But we are
+  fixing a pinning, which means in particular that the maps $\phi_\alpha$
+  for $\alpha$ simple are canonically defined (by the requirement that the
   standard pinning of $SL(2)$ be carried to the pinning for $G$). This means
-  that the generator \f$\sigma_\alpha\f$ (still for \f$\alpha\f$ simple) is
+  that the generator $\sigma_\alpha$ (still for $\alpha$ simple) is
   canonically defined.
 */
 class TitsGroup : public TwistedWeylGroup
@@ -500,13 +454,13 @@ class TitsGroup : public TwistedWeylGroup
   /*!
 \brief List of the images in character lattice mod 2 of the simple roots.
 
-Regarded as elements of order two in the dual torus \f$T^\vee\f$, these are
-the elements \f$m_\alpha^\vee\f$.
+Regarded as elements of order two in the dual torus $T^\vee$, these are
+the elements $m_\alpha^\vee$.
   */
   std::vector<TorusPart> d_simpleRoot;
 
   /*!
-\brief List of the elements \f$m_\alpha\f$ (for \f$\alpha\f$ simple) in $H(2)$.
+\brief List of the elements $m_\alpha$ (for $\alpha$ simple) in $H(2)$.
   */
   std::vector<TorusPart> d_simpleCoroot;
 
@@ -514,11 +468,13 @@ the elements \f$m_\alpha^\vee\f$.
 \brief Transpose of the reduction mod 2 of the matrix of the defining
 involution of the inner class.
 
-Gives the action of the (transposed fundamental) involution \f$\delta\f$ on
-$H(2)$, for twisting TorusPart values when commuting with \f$\delta\f$.
+Gives the action of the (transposed fundamental) involution $\delta$ on
+$H(2)$, for twisting TorusPart values when commuting with $\delta$.
   */
   BinaryMap d_involution;
 
+  // action of $-w_0$ after applying |d_involution|
+  BinaryMap dual_involution;
 
 // copy and assignment
 // reserve and implement when necessary
@@ -539,18 +495,14 @@ $H(2)$, for twisting TorusPart values when commuting with \f$\delta\f$.
 	    const WeylGroup& W,
 	    const weyl::Twist& twist);
 
-  //!\brief Constructor for Tits group relative to a subsystem
-  TitsGroup(const SubSystemWithGroup& sub,
-	    const WeightInvolution& theta,
-	    WeylWord& ww);
-
-  //\brief Like a copy contructor, but reference |W| rather than share or copy
+  //\brief Like a copy constructor, but reference |W| rather than share or copy
   TitsGroup(const TitsGroup& Tg, const WeylGroup& W)
     : TwistedWeylGroup(W,Tg.twist())
     , d_rank(Tg.d_rank)
     , d_simpleRoot(Tg.d_simpleRoot)
     , d_simpleCoroot(Tg.d_simpleCoroot)
     , d_involution(Tg.d_involution)
+    , dual_involution(Tg.dual_involution)
   {}
 
 // All methods being accessors, we classify by behaviour w.r.t. TitsElt objects
@@ -573,8 +525,8 @@ $H(2)$, for twisting TorusPart values when commuting with \f$\delta\f$.
  /*!\brief Applies to the element x of H(2) simple reflection s.
 
     This is the same thing as conjugating |x|, viewed as embedded in the Tits
-    group, by \f$\sigma_s\f$, or equivalently by its inverse (as
-    \f$\sigma_s^2\f$ commutes with $x$). This is used internally to compute
+    group, by $\sigma_s$, or equivalently by its inverse (as
+    $\sigma_s^2$ commutes with $x$). This is used internally to compute
     the proper commutation relations between Weyl group and torus parts of a
     Tits element.
   */
@@ -592,7 +544,10 @@ $H(2)$, for twisting TorusPart values when commuting with \f$\delta\f$.
 
   //!\brief Binary matrix*vector product to compute twist on torus part
   TorusPart twisted(const TorusPart x) const { return d_involution*x; }
+  TorusPart dual_twisted(const TorusPart x) const { return dual_involution*x; }
   TitsElt twisted(const TitsElt& te) const;
+  // dual twist adds in a shift (computed by |TitsCoset::is_dual_twist_stable|)
+  TitsElt dual_twisted(const TitsElt& te, const TorusPart shift) const;
 
   //!\brief In-place imperative version of |twisted(TorusPart x)|
   void twist(TorusPart x) const { x=twisted(x); }
@@ -629,7 +584,7 @@ $H(2)$, for twisting TorusPart values when commuting with \f$\delta\f$.
   void left_add (TorusPart t,TitsElt& a) const
   { a.d_t += t; }
 
-/*!\brief Conjugate |a| by \f$\sigma_\alpha\f$, where \f$\alpha=\alpha_s\f$. */
+/*!\brief Conjugate |a| by $\sigma_\alpha$, where $\alpha=\alpha_s$. */
   void sigma_conjugate(TitsElt& a, weyl::Generator s) const
   {
     sigma_mult(s,a); mult_sigma_inv(a,s);
@@ -731,23 +686,12 @@ class TitsCoset
   const RootSystem& rs; // needed (only) for the |grading| method
 
  public:
-  TitsCoset(const ComplexReductiveGroup& G,
-	    Grading base_grading);
+  TitsCoset(const ComplexReductiveGroup& G, Grading base_grading);
 
   TitsCoset(const ComplexReductiveGroup& G);// adjoint case
 
   TitsCoset(const ComplexReductiveGroup& G,
 	    tags::DualTag);// dual adjoint case
-
-  // build Tits coset for subdatum, incorporating adapted parent base grading
-  TitsCoset(const subdatum::SubDatum& sub,
-	    Grading parent_base_grading);
-
-  // this constructor computes the inner class for |sub| defined by |theta|
-  TitsCoset(const SubSystemWithGroup& sub,
-	    const WeightInvolution& theta,
-	    Grading parent_base_grading, // by value: small
-	    WeylWord& ww);
 
   ~TitsCoset() { delete(my_Tits_group); }
 
@@ -776,6 +720,10 @@ class TitsCoset
   // operation defining cross action of simple roots
   inline void basedTwistedConjugate(TitsElt& a, size_t s) const;
 
+  // when no equivalence of |TitsElt| values is to be allowed (extended blocks)
+  // a more strict implementation of twisted conjugations is called for
+  void strict_based_twisted_conjugate(TitsElt& a, size_t s) const;
+
   void basedTwistedConjugate(TitsElt& a, const WeylWord& w) const;
   void basedTwistedConjugate(const WeylWord& w, TitsElt& a) const;
 
@@ -791,8 +739,7 @@ class TitsCoset
   // conjugate Tits group element by $\delta_1$
   TitsElt twisted(const TitsElt& a) const;
   // also keep a version for torus part only
-  tits::TorusPart twisted(const tits::TorusPart& t) const
-  { return Tg.twisted(t);}
+  TorusPart twisted(const TorusPart& t) const { return Tg.twisted(t);}
 
   // various methods that provide a starting KGB element for any Cartan class
   TitsElt naive_seed (ComplexReductiveGroup& G,
@@ -815,7 +762,7 @@ class EnrichedTitsGroup : public TitsCoset
   cartanclass::square_class square() const { return srf.second; }
 
   // whether arbitrary root |n| is compact for |x| in fundamental fiber
-  bool is_compact(const tits::TorusPart& x, RootNbr n) const
+  bool is_compact(const TorusPart& x, RootNbr n) const
     { return not grading(TitsElt(titsGroup(),x),n); }
 
   TitsElt backtrack_seed (const ComplexReductiveGroup& G,
