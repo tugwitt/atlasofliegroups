@@ -89,6 +89,8 @@ rv=[]  in
 for P in all do (P,theta_stable_parabolics(G,P)) od
 { let rv_P=[KGBElt]:[] in  for y in KGP(G,P) do if is_theta_stable(y,P) then rv_P#:=max(y) fi od;rv#:=(P,rv_P) od;rv}
 
+set Levi([int] P,KGBElt x)=real_form(Levi(real_form(x),P),involution(x),torus_factor(x))
+
 set print_all_theta_stable_parabolics(RealForm G)=void:
 let total=0 in for (P,v) in all_theta_stable_parabolics(G) do
 let L=Levi(G,P) in 
