@@ -22,7 +22,6 @@
 #include "kgb.h"
 #include "blocks.h"
 #include "repr.h"
-#include "prettyprint.h"
 
 /*
   For an extended group, the block structure is more complicated than an
@@ -1934,14 +1933,11 @@ ext_block::ext_block // for an external twist
   for (BlockElt z=0; z<block.size(); ++z)
     if (twisted(block,z,delta)==z)
       fixed_points.insert(z);
-  unsigned denom = block.gamma().denominator();
-  Weight num = block.gamma().numerator();
-  std::cout << "infl char denom = " << denom  << std::endl;
-  prettyprint::printVector(std::cout  << ", infl char num = ",num) << std::endl;
 
   complete_construction(fixed_points);
   if (not check(block,verbose)) // this sets the edge signs, not just a check!
     throw std::runtime_error("Failure detected in extended block construction");
+
 } // |ext_block::ext_block|, from a |param_block|
 
 void ext_block::complete_construction(const BitMap& fixed_points)
@@ -2022,44 +2018,6 @@ void ext_block::complete_construction(const BitMap& fixed_points)
 	dest.second = child_nr[second];
     }
   } // |for(n)|
-   //  test braids;
-
-  bool OK=true;
-  int count=0; int failed=0;
-  for (weyl::Generator t=0; t<rank(); ++t)
-    for (weyl::Generator s=0; s<t+1; ++s)
-    {
-      BitMap seen(size());
-      for (BlockElt x=0; x<size(); ++x)
-	if (not seen.isMember(x))
-	  {
-	    BitMap cluster(size());
-	    if (check_braid(*this,s,t,x,cluster))
-	      ++count;
-	    else
-	    {
-	      ++failed;
-	      OK = false;
-	      std::cout <<  "Braid relation failure: " << z(x)
-			<< ", s=" << s+1 << ", t=" << t+1;
-	      for (BitMap::iterator it=cluster.begin(); it(); ++it)
-		std::cout << (it==cluster.begin() ? " (" : ",")
-			  << z(*it) ;
-
-	      std::cout << ')' << std::endl;
-	    }
-	    seen |= cluster; // don't do elements of same cluster again
-	  }
-    }
-  if(not OK)
-    {
-      std::cout << "braid failure!" << std::endl;
-     }
-  // std::cout << "tested braids!" << std::endl;
-  //  if(OK) std::cout << "All " << count
-  // << " braid relations hold!" <<std::endl;
-  // if(not OK) std::cout << "braid failure!" << std::endl;
-  // assert(OK);
 } // |ext_block::complete_construction|
 
 // we compute $\max\{l\mid l_start[l]\leq n\}$, i.e. |upper_bound(,,n)-1|
