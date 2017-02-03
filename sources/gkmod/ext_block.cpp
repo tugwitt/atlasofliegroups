@@ -441,12 +441,29 @@ StandardRepr scaled_extended_dominant // result will have its |gamma()| dominant
   }
 
   // finally get result ordinary parameter and check that it agrees with |E|
+  auto result0 = result;
   rc.make_dominant(result);
-  assert(result == rc.sr_gamma(x,E.lambda_rho,ctxt.gamma()));
+  result0 = rc.sr_gamma(x,E.lambda_rho,ctxt.gamma());
+  // auto EF = extended_finalise(rc,result, delta);
+  //  auto EF0 = extended_finalise(rc,result0,delta);
+  auto EFpol = rc.expand_final(result);
+  auto EFpol0 = rc.expand_final(result0);
+  // assert((EFpol == EFpol0));
+  if (not(EFpol == EFpol0))
+    {
+      std::cout << "bad scaled_extended at x0 = " << x << "factor = " << factor
+		<< ", infl char den = "
+		<< sr.gamma().denominator() << ", num = [";
+      for (size_t i= 0; i < sr.gamma().numerator().size(); ++i)
+	{
+	  std::cout << sr.gamma().numerator()[i] << ",";
+	}
+      std::cout << "]" << std::endl;
+    }
 
   // but the whole point of this function is to record the relative flip too!
-  flipped = not same_sign(E,param(ctxt,result)); // compare |E| to default ext.
-  return result;
+  flipped = not same_sign(E,param(ctxt,result0)); // compare |E| to default ext.
+  return result0;
 
 } // |scaled_extended_dominant|
 
