@@ -520,7 +520,12 @@ containers::sl_list<std::pair<StandardRepr,bool> > extended_finalise
   auto EFpol = rc.expand_final(sr);
   for(repr::SR_poly::const_iterator it = EFpol.begin(); it!=EFpol.end();++it)
     ++count;
-  assert(count==count0);
+  // assert(count==count0);
+  if((count != count0))
+    {
+      std::cout << "bad ext_fin, count = " << count << ", count0 = "
+		<< count0 << std::endl;
+    }
   return result;
 } // |extended_finalise|
 
