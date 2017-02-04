@@ -482,7 +482,6 @@ containers::sl_list<std::pair<StandardRepr,bool> > extended_finalise
   assert(is_dominant_ratweight(rc.rootDatum(),sr.gamma()));
   // must assume gamma dominant, DON'T call make_dominant here
   context ctxt(rc,delta,sr.gamma());
-  unsigned int count0 = 0;
   const ext_gens orbits = rootdata::fold_orbits(ctxt.id(),delta);
   const RankFlags singular_orbits =
     reduce_to(orbits,singular_generators(ctxt.id(),sr.gamma()));
@@ -495,10 +494,7 @@ containers::sl_list<std::pair<StandardRepr,bool> > extended_finalise
     to_do.pop(); // we are done with |head|
     auto s = first_descent_among(singular_orbits,orbits,E);
     if (s>=orbits.size()) // no singular descents, so append to result
-      {
       result.emplace_back(std::make_pair(E.restrict(),not is_default(E)));
-      ++count0;
-      }
     else // |s| is a singular descent orbit
     { containers::sl_list<param> links;
       auto type = star(E,orbits[s],links);
@@ -516,16 +512,15 @@ containers::sl_list<std::pair<StandardRepr,bool> > extended_finalise
     }
   }
   while(not to_do.empty());
-  unsigned count = 0;
-  auto EFpol = rc.expand_final(sr);
-  for(repr::SR_poly::const_iterator it = EFpol.begin(); it!=EFpol.end();++it)
-    ++count;
-  // assert(count==count0);
-  if((count != count0))
-    {
-      std::cout << "bad ext_fin, count = " << count << ", count0 = "
-		<< count0 << std::endl;
-    }
+
+  { auto ExpFpol = rc.expand_final(sr); // ExpandFinal
+    repr::SR_poly ExtFpol(rc.repr_less()); // ExtendedFinalise
+    for (auto it=result.begin(); it!=result.end(); ++it)
+      ExtFpol.add_term(it->first, Split_integer(1,0)); // ignore any flip
+    if (ExtFpol!=ExpFpol)
+      throw std::runtime_error("bad result in extended_finalise");
+  }
+
   return result;
 } // |extended_finalise|
 
