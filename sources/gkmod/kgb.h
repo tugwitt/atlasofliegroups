@@ -343,7 +343,8 @@ and in addition the Hasse diagram (set of all covering relations).
 
   // as the name suggests, the following assumes |alpha| simple-imaginary
   bool simple_imaginary_grading(KGBElt x,RootNbr alpha) const
-  { return d_base->simple_imaginary_grading(torus_part(x),alpha); }
+    // { return d_base->simple_imaginary_grading(torus_part(x),alpha); }
+  { return d_base->grading(titsElt(x),alpha); }
 
   KGBElt lookup(TitsElt a) const; // by value; it may return |UndefKGB|
 
