@@ -1,7 +1,7 @@
-<polynomial.at
 <rational_polynomial.at
 <sort.at
 <ratmat.at
+<gaussian.at
 
 set Cartesian ([int] a, [int] b) = [int]:
     ## for x in a do for y in b do x*y od od
@@ -52,7 +52,7 @@ set relative_primes(int n) = [int]:
 
 { a can be negative, N must be positive }
 {. integer a -> representative 0\le b\le N-1 mod N .}
-set mod (int a, int N) = int: assert(N>0,"N<=0"); a%N
+set mod (int a, int N) = int: assert(N>0,"N<=0");a%N
 
 
 { to_denominator(r,N): integer $a$ such that rational $r$ is congruent to
@@ -78,8 +78,10 @@ set degree (cyclotomicField F) = int: #F.Phi-1
 
 set = (cyclotomicField E,cyclotomicField F) = bool: F.order=E.order
 
+{element in a cyclotomic field is ([rat],cyclotomicField)
+ use [rat] rather than ratvec to allow bigints}
 {. element in a cyclotomic field.}
-: cyclotomicFieldElement = (ratvec v,cyclotomicField F)
+: cyclotomicFieldElement = ([rat] v,cyclotomicField F)
 
 {.reduce rational polynomial modulo Phi(n).}
 set reduce (cyclotomicFieldElement (v,F)) = cyclotomicFieldElement:
@@ -89,7 +91,7 @@ set = (cyclotomicFieldElement(v,F),cyclotomicFieldElement(w,G)) = bool:
    assert(F=G,"cyclotomic fieds differ in comparison");
    let (,r)= monic_divide(ratpoly_sub(v,w),F.Phi) in =r
 
-set cyclotomic_field_element = reduce@(ratvec,cyclotomicField)
+set cyclotomic_field_element = reduce@([rat],cyclotomicField)
 
 {.embed Q in cyclotomic field as (images of) constant polynomials.}
 set embed_Q (rat r,cyclotomicField F) = cyclotomicFieldElement:
@@ -99,7 +101,6 @@ set one (cyclotomicField F) = cyclotomicFieldElement:  embed_Q(1,F)
 set zero (cyclotomicField F) = cyclotomicFieldElement: embed_Q(0,F)
 
 set primitive_root (cyclotomicField F) = cyclotomic_field_element([0,1],F)
-
 
 {operations on elements of cyclotomic fields}
 
@@ -149,11 +150,11 @@ set to_integer(cyclotomicFieldElement z)=int:
 { embed roots of unity in F }
 set exp_1 (rat r,cyclotomicField F) = cyclotomicFieldElement:
    let k=to_denominator(r,F.order) in
-   cyclotomic_field_element(null(k)#1,F)
+   cyclotomic_field_element(null(k)##[1/1],F)
 
 set zeta_power (int k, cyclotomicField F) = cyclotomicFieldElement:
    { first reduce modulo $X^n-1$, then modulo $\Phi(n)$ }
-   reduce(null(k%F.order)#1,F)
+   reduce(null(k%F.order)##[1/1],F)
 
 set * (ratmat M,cyclotomicFieldElement (v,F)) = cyclotomicFieldElement:
    ( M*v , F )
@@ -191,18 +192,33 @@ set inverse_by_norm (cyclotomicFieldElement (,F):z) = cyclotomicFieldElement:
 set inverse_by_matrix (cyclotomicFieldElement(,F):z) = cyclotomicFieldElement:
    inverse(matrix_of_multiplication(z))*F.one
 
+{
+two alternate versions of inverse, no longer used
+these use functions in gaussian_alt.at, which is no longer called
+
 set inverse_by_solve (cyclotomicFieldElement(,F):z) = cyclotomicFieldElement:
    (solve(matrix_of_multiplication(z),F.one.v)[0],F)
 
-{ use inverse_by_solve }
+set inverse_by_big_solve(cyclotomicFieldElement(,F):z) = cyclotomicFieldElement:
+    let M=matrix_of_multiplication(z) {|ratmat|} then 
+    N=ratmat_to_bigmat(M) then
+    v=[rat]:F.one.v in (solve(N,v),F)
+}
+
+{inverse uses inverse of [[rat]] from gaussian.at}
 {.inverse of element in cyclotomic field.}
-set inverse = inverse_by_solve@cyclotomicFieldElement
+set inverse(cyclotomicFieldElement(,F):z) = cyclotomicFieldElement:
+    let M=matrix_of_multiplication(z) {|ratmat|} then 
+    N=ratmat_to_bigmat(M) then
+    v=[rat]:F.one.v in (times(inverse(N),v),F)
 
 set / = inverse@cyclotomicFieldElement { unary division is inverse }
 
-set / (cyclotomicFieldElement(v,F), cyclotomicFieldElement z) =
+{set / (cyclotomicFieldElement(v,F), cyclotomicFieldElement z) =
       cyclotomicFieldElement:
-   (solve(matrix_of_multiplication(z),v)[0],F)
+   (solve(matrix_of_multiplication(z),v)[0],F)}
+
+set / (cyclotomicFieldElement z, cyclotomicFieldElement w)=cyclotomicFieldElement:z*inverse(w)
 
 {.convert cyclotomic field element to a string for output.}
 set to_string (cyclotomicFieldElement z) = string:

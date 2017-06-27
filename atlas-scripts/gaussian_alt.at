@@ -1,0 +1,82 @@
+{old version of gaussian elimination, not used any longer
+ not loaded by any other file
+ kept for testing and in case it is necessary to revisit
+ some of these functions
+ in particular: inverse_by_solve and inverse_by_big_solve 
+ in cyclotomic.at have been commented out, these used solve from 
+ this file
+}
+
+<basic.at
+<ratmat.at
+
+set max ([rat] a) = (int,rat): let l=#a in assert(l.>,"Maximum of an empty list");
+  let m=[#a-1,a~[0]] in for i:l-1 do if abs(a[i])>abs(m[1]) then m:=[i,a[i]] fi od; (rat_as_int(m[0]),m[1])
+
+set find_pivot(int k, [rat] v)=let (m,)=max(v[k:#v]) in {prints("pivot=", m+k);}m+k
+
+set update_matrix_entry([[rat]] M, int i, int j, rat x)= [[rat]]:
+  let row=M[i] in row[j]:=x; M[i]:=row; M
+
+set swap_rows([[rat]] M, int i, int j)=
+for k:#M do 
+ let x=M[k][i] in
+ M:=update_matrix_entry(M,k,i,M[k][j]);
+ M:=update_matrix_entry(M,k,j,x) od;M
+
+{gaussian elimination to put a non-singular rational matrix [[rat]] in
+upper triangular form. Allowing [[rat]] enables big rationals.
+Over Q, easier than Z see |echelon|
+M=[[rat]], M[i] is a column of M,
+so M[i][j] is the entry in the i^th column and j^th row
+}
+set gauss([[rat]] M)=
+let n=#M, m=#M[0] in
+for k:min(m,n) do 
+ let i_pivot=find_pivot(k,M[k]) in
+ M:=swap_rows(M,k,i_pivot);
+   for i:m-1-k from k+1 do  {i: k+1 to m-1}
+   let r=M[k][i]/M[k][k] in
+     for j: n-k-1 from k+1 do  {j: k+1 to n-1}
+    M:=update_matrix_entry(M,j,i, M[j][i]-M[j][k]*r);
+    M:=update_matrix_entry(M,k,i,0 )
+    od od od ;M
+
+
+{solve Mx=y, y=[rat] of size n, A=upper-triangular,
+nxn, nonsingular}
+set back_solve([[rat]] M, [rat] y)=
+let n=#M then
+rv=[rat]:null(n)/1 in
+for k:n downto 0 do 
+{    prints(new_line,"doing k:",k);}
+{    prints("rv=",rv);}
+    let sum=rat:0 in 
+     for j:n-1-k from k+1 {j: k+1 to n-1} do 
+{      prints("doing j:",j);}sum+:=M[j][k]*rv[j] od; {prints("k=", k, "  y[k]:=", y[k], " sum=", sum, "  M[k][k]=", M[k][k]);}
+   rv[k]:=(y[k] - sum)/M[k][k]  od;rv
+  
+
+{ rv[k]:=(y[k] - sum(for j:n-1-k from k+1 {j: k+1 to n-1} do M[j][k]*rv[j] od))/M[k][k]  od;rv}
+
+{multiplication [[rat]]*[rat], using big rationals, 
+requires new definition (and name to avoid disambiguation problem)}
+{set times([[rat]] M,[rat] v)=[rat]:for i:#v do sum([rat]:for j:#v do M[j][i]*v[j] od) od }
+set times([[rat]] M,[rat] v)=[rat]:for i:#v do let entry=rat:0 in for j:#v do entry+:=M[j][i]*v[j] od; entry od
+
+{
+set id_mat_bigint(int n)=
+let z=for i:n do [rat]:null(n)/1 od in 
+for j:n do z:=update_matrix_entry(z,j,j,1) od; z
+set make_mat([[rat]] M)=mat:for i:#M do for j:#M[0] do rat_as_int(M[i][j]) od od
+set make_ratmat([[rat]] M)=ratmat: ratvecs_as_ratmat(for i:#M do ratvec:M[i] od)
+}
+
+{solve Mx=y, M is nxn nonsingular [[rat]], y=[rat] size n}
+{algorithm: M_aug=[M,y], apply gaussian elimination,
+write the result [N,z] where N is upper triangular, then 
+back_solve(N,z)}
+set solve([[rat]] M, [rat] y)=
+let A=gauss(M#y) in 
+back_solve(A[0:#A-1], A[#A-1])
+
