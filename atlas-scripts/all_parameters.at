@@ -1,6 +1,8 @@
 <basic.at
 <lattice.at { for in_lattice_basis }
 <K_types.at
+<center.at
+
 { reduce [Param] by combining equivalent parameters;
   returns a list of inequivalent parameters }
 set reduce ([Param] parameters) = [Param]:
