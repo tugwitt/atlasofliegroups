@@ -415,8 +415,9 @@ template<typename C> class Vector_cref
   // that is, if compiler version is sufficiently new
   using base::base; // inherit all constructors
 #else
-  explicit Vector_cref (const Vector<C>& v) noexcept : base(v) {}
-  Vector_cref (const base& v) noexcept : base(v) {}
+  //  explicit Vector_cref (const Vector<C>& v) noexcept : base(v) {}
+  //  Vector_cref (const base& v) noexcept : base(v) {}
+  using base::base; // inherit all constructors 
 #endif
   Vector_cref (const Vector_cref& v) = default;
 

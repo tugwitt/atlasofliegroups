@@ -1,20 +1,20 @@
-# See the file INSTALL for detailed instructions
+# # See the file INSTALL for detailed instructions
 
-# the following line avoids trouble on some systems (GNU make does this anyway)
-SHELL = /bin/sh
-INSTALL = /usr/bin/install
+# # the following line avoids trouble on some systems (GNU make does this anyway)
+# SHELL = /bin/sh
+# INSTALL = /usr/bin/install
 
-# You may edit the INSTALLDIR and BINDIR variables
+# # You may edit the INSTALLDIR and BINDIR variables
 
-# INSTALLDIR is where the executables Fokko, atlas and the messages directory
-# will be moved after successfull compilation
+# # INSTALLDIR is where the executables Fokko, atlas and the messages directory
+# # will be moved after successfull compilation
 
-# BINDIR is where a symbolic link to the 'Fokko' executable will be created,
-# and shell script executing 'atlas' will be placed; provided this directory
-# is in the search path, you can then call Fokko, atlas from anywhere
+# # BINDIR is where a symbolic link to the 'Fokko' executable will be created,
+# # and shell script executing 'atlas' will be placed; provided this directory
+# # is in the search path, you can then call Fokko, atlas from anywhere
 
-# However when BINDIR is INSTALLDIR one cannot have those shell scripts since
-# they would be at the same place as the executable to call; since both default
+# # However when BINDIR is INSTALLDIR one cannot have those shell scripts since
+# # they would be at the same place as the executable to call; since both default
 # to the current directory, you are advised to set at least BINDIR explicitly.
 # INSTALLDIR only needs to be changed if the current directory is temporary
 
@@ -84,9 +84,9 @@ dependencies := $(Fokko_objects:%.o=%.d)
 # development with debugging (gflags)
 # profiling (pflags)
 nflags := -Wall -DNDEBUG
-oflags := -Wall -O3 -DNDEBUG
+oflags := -Wall -Ofast -DNDEBUG
 gflags := -Wall -ggdb
-pflags := -Wall -pg -O3 -DNDEBUG -DNREADLINE
+pflags := -Wall -pg -Ofast -DNDEBUG -DNREADLINE
 
 
 # these flags are necessary for compilation, the -c should not be altered
@@ -133,7 +133,7 @@ endif
 ifdef LDFLAGS
     LDFLAGS := $(LDFLAGS) $(rl_libs)
 else
-    LDFLAGS := $(rl_libs)
+   LDFLAGS := $(rl_libs)
 endif
 
 ifeq ($(verbose),true)
@@ -142,17 +142,18 @@ endif
 
 # the compiler to use, including language switch
 # some C++11 support needed (rvalue references, shared_ptr) but g++-4.4 suffices
-CXX = g++ -std=c++0x
+# CXX = g++ -std=c++0x
+CXX = /usr/bin/g++ -std=c++0x
 
 CXXVERSION := $(shell $(CXX) -dumpversion)
 CXXVERSIONOLD := $(shell expr `echo $(CXXVERSION) | cut -f1-2 -d.` \< 4.8)
 CXXVERSIONVERYOLD := $(shell expr `echo $(CXXVERSION) | cut -f1-2 -d.` \< 4.6)
 
 ifeq "$(CXXVERSIONOLD)" "1"
-  CXXFLAVOR += -Dincompletecpp11
+#  CXXFLAVOR += -Dincompletecpp11
 endif
 ifeq "$(CXXVERSIONVERYOLD)" "1"
-  CXXFLAVOR += -Dnoexcept= -Dconstexpr= -Dnullptr=0
+#  CXXFLAVOR += -Dnoexcept= -Dconstexpr= -Dnullptr=0
 endif
 
 
@@ -277,3 +278,8 @@ showobjects:
 	@echo atlas_objects: $(atlas_objects)
 	@echo
 	@echo Fokko_objects: $(Fokko_objects)
+
+# test:
+#	$(CXX) $(CXXFLAGS) -o testinclude.o testinclude.cpp
+#	$(CXX) -o test testinclude.o
+# $(LDFLAGS)
