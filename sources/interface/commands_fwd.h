@@ -21,7 +21,7 @@ namespace commands {
   struct Command;
   class CommandNode;
   class CommandTree;
-  class StrCmp;
+  struct StrCmp;
 
   typedef std::map<const char*,const char*, StrCmp> TagDict;
 

@@ -380,7 +380,7 @@ however.
 
 @< Type definitions @>=
 
-class function_base;
+struct function_base;
 // derived from |value_base|, defined in \.{axis.h}; values with function type
 typedef std::shared_ptr<const function_base> shared_function;
 // specialises |shared_value|

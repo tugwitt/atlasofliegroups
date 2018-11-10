@@ -250,7 +250,7 @@ namespace atlas {
     struct InnerClassType;
     struct Layout;
     typedef char TypeLetter;
-    class ext_gen;
+    struct ext_gen;
   }
   using lietype::SimpleLieType;
   using lietype::LieType;
@@ -329,7 +329,7 @@ namespace atlas {
   namespace involutions {
     class InvolutionData;
     class InvolutionTable;
-    class Cartan_orbit;
+    struct Cartan_orbit;
     class Cartan_orbits;
   }
   using involutions::InvolutionData;

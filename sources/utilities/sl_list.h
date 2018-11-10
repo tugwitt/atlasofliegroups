@@ -176,7 +176,7 @@ public:
 
 }; // |struct sl_list_iterator| template
 
-template<typename T, typename Alloc> struct weak_sl_list_iterator;
+template<typename T, typename Alloc> class weak_sl_list_iterator;
 template<typename T, typename Alloc = std::allocator<T> >
   struct weak_sl_list_const_iterator
   : public std::iterator<std::forward_iterator_tag, T>
