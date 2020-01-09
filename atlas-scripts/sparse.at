@@ -1,3 +1,5 @@
+<basic.at
+{whole file commented out on the notsparse branch
 {multiplication of a square integer matrix times
 a square sparse matrix on the right}
 
@@ -67,3 +69,4 @@ set N=mat:[[1,2],[3,4]]
 
 set v=[1,0,0,0,0]
 set Q=mat:[v,v,v,v,v]
+}
