@@ -1,0 +1,46 @@
+set G=E7_s
+set parabnodelist=[0,1,2,3,4,6]
+set P=Parabolic:(parabnodelist,trivial(G).x)
+set L=Levi(P)
+set p=parameter(KGB(L,415),[2,2,2,2,2,-9,0]/2,[0,0,1,0,0,-1,0]/1)
+
+set Ld=L.derived
+set pd=parameter(KGB(Ld,750),[1,1,1,1,1,0]/1,[0,0,1,0,0,0]/1)
+
+set G =L
+set x=KGB(G,15)
+set  gamma=[   2,   2,   2,   2,   2, -11,   2 ]/2
+set         g=[  8, 10, 14, 18, 10,  0,  1 ]/2
+set lambda_rho=[0,0,0,0,0,0,0]
+set       tau=[ 0, 0, 0, 0, 0, 0, 0 ]
+set          l=[ 0, 0, 0, 0, 0, 0, 0 ]
+set          t=[ 0, 0, 0, 0, 0, 0, 0 ]
+set theta=x.involution
+set omega=-^theta
+set w=reflection(G,0)
+set E=ExtParam:(inner_class(G),G.distinguished_involution, gamma,lambda_rho,theta,g,l,omega,tau,t)
+{now: ext_cross(w,E) gives an error}
+
+{
+prints("Ld=",pd.real_form)
+prints("pd=",pd)
+prints("infinitesimal character:", pd.infinitesimal_character)
+prints("K-types:");print_branch_irr_long(pd,10)
+prints("is_unitary(pd):", is_unitary(pd))
+prints("hermitian form on pd:")
+print_hermitian_form_irreducible(pd)
+set hpd=hermitian_form_irreducible(pd)
+prints("form on K-types of pd:", " ", branch(hpd,16))
+
+
+prints()
+prints("L=",p.real_form)
+prints("p=",p)
+prints("infinitesimal character:", p.infinitesimal_character)
+prints("K-types:");print_branch_irr_long(p,10)
+prints("is_unitary(p):", is_unitary(p))
+prints("hermitian form on p:")
+print_hermitian_form_irreducible(p)
+set hp=hermitian_form_irreducible(p)
+prints("form on K-types of p:", " ", branch(hp,16))
+}
