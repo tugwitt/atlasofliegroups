@@ -104,7 +104,7 @@ set ext_cross(
      ExtParam:(ic,delta,gamma2,lambda_rho2,theta1,g,l1,-^theta1,tau1,t1)
   in
   if not valid(result)
-  then error(new_line+"invalid parameter in ext_cross, w=",w,format(E))
+  then prints("result:");display(result); error(new_line+"invalid parameter in ext_cross, w=",w,format(E))
   else result
   fi
 
