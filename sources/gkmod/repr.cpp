@@ -1033,8 +1033,19 @@ Rep_table::Rep_table(RealReductiveGroup &G)
 , KL_poly_pool{KLPol(),KLPol(KLCoeff(1))}, KL_poly_hash(KL_poly_pool)
 , poly_pool{ext_kl::Pol(0),ext_kl::Pol(1)}, poly_hash(poly_pool)
 , block_list(), place()
+, param_saved(0),terms_saved(0)
 {}
-Rep_table::~Rep_table() = default;
+Rep_table::~Rep_table()
+{
+  size_t total=0;
+  for (const auto& item : pool)
+    total += item.def_form_size() + item.twisted_def_form_size();
+
+  std::cout << "Number of alcoves " << pool.size()
+	    << " totalling " << total  << " terms.\n";
+  std::cout << "Alcoves saved storing " << param_saved
+	    << " formulas totalling " << terms_saved << " terms.\n";
+}
 
 unsigned short Rep_table::length(StandardRepr sr)
 {
@@ -1714,7 +1725,11 @@ K_type_poly_vec Rep_table::deformation(const StandardRepr& z)
   { // look up if deformation formula for |z_near| is already known and stored
     unsigned long h=alcove_hash.find(zn);
     if (h!=alcove_hash.empty and pool[h].has_deformation_formula())
+    {
+      if (zn.sample!=pool[h].sample)
+	++param_saved,terms_saved+=pool[h].def_form_size();
       return pool[h].def_formula();
+    }
   }
 
   // otherwise compute the deformation terms at all reducibility points
@@ -2006,10 +2021,14 @@ K_type_poly_vec Rep_table::twisted_deformation (StandardRepr z)
   { // if formula for |z| was previously stored, return it with |s^flip_start|
     const auto h=alcove_hash.find(zu);
     if (h!=alcove_hash.empty and pool[h].has_twisted_deformation_formula())
+    {
+      if (zu.sample!=pool[h].sample)
+	++param_saved,terms_saved+=pool[h].twisted_def_form_size();
       return flip_start // if so we must multiply the stored value by $s$
 	? K_type_poly_vec().add_multiple
 	(pool[h].twisted_def_formula(),Split_integer(0,1))
 	: pool[h].twisted_def_formula();
+    }
   }
 
   { // initialise |result| to fully deformed parameter expanded to finals
