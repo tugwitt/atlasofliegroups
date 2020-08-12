@@ -1016,9 +1016,10 @@ size_t deformation_unit::hashCode(size_t modulus) const
   size_t hash = 7*sample.x() + 89*sample.y().data().to_ulong();
   const int_Matrix& theta = rc.kgb().involution_matrix(sample.x());
   const auto& num = sample.gamma().numerator();
+  const unsigned int den = sample.gamma().denominator();
   const auto free_lambda = theta*num+num;
   for (int c : free_lambda) // take into account free part of $\lambda$
-    hash = 21*(hash&(modulus-1))+c;
+    hash = 21*(hash&(modulus-1))+c/den;
 
   const auto& rd = rc.root_datum();
   const int denom = sample.gamma().denominator(); // convert to |int|
